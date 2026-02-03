@@ -224,6 +224,7 @@ export interface Category {
   type: string          // e.g. 'expense'
   color: string
   icon: string
+  is_system: boolean
 }
 
 export const categoryApi = {

@@ -81,6 +81,18 @@ class CategoryResponse(BaseModel):
     type: str
     color: str
     icon: str
+    is_system: bool
+
+# Default categories to auto-seed for each tenant
+DEFAULT_CATEGORIES = [
+    {"name": "Food & Dining",   "type": "expense", "color": "#f97316", "icon": "utensils"},
+    {"name": "Transportation",  "type": "expense", "color": "#3b82f6", "icon": "car"},
+    {"name": "Shopping",        "type": "expense", "color": "#a855f7", "icon": "shopping"},
+    {"name": "Utilities",       "type": "expense", "color": "#10b981", "icon": "home"},
+    {"name": "Healthcare",      "type": "expense", "color": "#ef4444", "icon": "heart"},
+    {"name": "Entertainment",   "type": "expense", "color": "#ec4899", "icon": "film"},
+    {"name": "Other",           "type": "expense", "color": "#64748b", "icon": "folder"},
+]
 
 class BudgetCreate(BaseModel):
     category_id: Optional[str] = None
@@ -155,6 +167,35 @@ async def get_exchange_rate(
         return Decimal("1.0") / rate_obj.rate
     
     return Decimal("1.0")
+
+async def ensure_default_categories_for_tenant(
+    db: AsyncSession,
+    tenant_id: str,
+):
+    # Check if this tenant already has any categories
+    result = await db.execute(
+        select(func.count(Category.id)).where(
+            Category.tenant_id == uuid.UUID(tenant_id)
+        )
+    )
+    count = result.scalar_one() or 0
+    if count > 0:
+        return  # already seeded or user created some
+
+    # Seed defaults
+    for cat in DEFAULT_CATEGORIES:
+        new_cat = Category(
+            tenant_id=uuid.UUID(tenant_id),
+            user_id=None,          # system-wide for this tenant
+            name=cat["name"],
+            type=cat["type"],
+            color=cat["color"],
+            icon=cat["icon"],
+            is_system=True,
+        )
+        db.add(new_cat)
+
+    await db.commit()
 
 @app.get("/health")
 async def health_check():
@@ -370,6 +411,9 @@ async def get_categories(
 ):
     user = get_current_user(request)
     await set_tenant_context(db, user["tenant_id"])
+
+    # Ensure system defaults exist for this tenant
+    await ensure_default_categories_for_tenant(db, user["tenant_id"])
     
     result = await db.execute(
         select(Category).where(
@@ -384,7 +428,8 @@ async def get_categories(
             name=cat.name,
             type=cat.type,
             color=cat.color,
-            icon=cat.icon
+            icon=cat.icon,
+            is_system=cat.is_system
         )
         for cat in categories
     ]
