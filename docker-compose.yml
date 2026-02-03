@@ -1,0 +1,321 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with TimescaleDB
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    container_name: finance_postgres
+    environment:
+      POSTGRES_DB: finance_db
+      POSTGRES_USER: finance_user
+      POSTGRES_PASSWORD: finance_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/shared/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finance_user -d finance_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - finance_network
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: finance_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass redis_password
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - finance_network
+
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: finance_minio
+    environment:
+      MINIO_ROOT_USER: minio_admin
+      MINIO_ROOT_PASSWORD: minio_password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - finance_network
+
+  # RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: finance_rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: rabbitmq_user
+      RABBITMQ_DEFAULT_PASS: rabbitmq_password
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - finance_network
+
+  # Auth Service
+  auth_service:
+    build:
+      context: ./backend
+      dockerfile: services/auth/Dockerfile
+    container_name: finance_auth_service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://finance_user:finance_password@postgres:5432/finance_db
+      REDIS_URL: redis://:redis_password@redis:6379/0
+      SECRET_KEY: your-secret-key-change-in-production
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRATION_MINUTES: 1440
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - finance_network
+    restart: unless-stopped
+
+  # Core Finance Service
+  finance_service:
+    build:
+      context: ./backend
+      dockerfile: services/finance/Dockerfile
+    container_name: finance_finance_service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://finance_user:finance_password@postgres:5432/finance_db
+      REDIS_URL: redis://:redis_password@redis:6379/1
+      AUTH_SERVICE_URL: http://auth_service:8001
+    ports:
+      - "8002:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - finance_network
+    restart: unless-stopped
+
+  # EMI Service
+  emi_service:
+    build:
+      context: ./backend
+      dockerfile: services/emi/Dockerfile
+    container_name: finance_emi_service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://finance_user:finance_password@postgres:5432/finance_db
+      REDIS_URL: redis://:redis_password@redis:6379/2
+      AUTH_SERVICE_URL: http://auth_service:8001
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minio_admin
+      MINIO_SECRET_KEY: minio_password
+    ports:
+      - "8003:8003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - finance_network
+    restart: unless-stopped
+
+  # Investment Service
+  investment_service:
+    build:
+      context: ./backend
+      dockerfile: services/investment/Dockerfile
+    container_name: finance_investment_service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://finance_user:finance_password@postgres:5432/finance_db
+      REDIS_URL: redis://:redis_password@redis:6379/3
+      AUTH_SERVICE_URL: http://auth_service:8001
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY:-your_finnhub_key_here}
+      ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY:-your_alpha_vantage_key_here}
+    ports:
+      - "8004:8004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - finance_network
+    restart: unless-stopped
+
+  # Market Service
+  market_service:
+    build:
+      context: ./backend
+      dockerfile: services/market/Dockerfile
+    container_name: finance_market_service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://finance_user:finance_password@postgres:5432/finance_db
+      REDIS_URL: redis://:redis_password@redis:6379/4
+      AUTH_SERVICE_URL: http://auth_service:8001
+      FINNHUB_API_KEY: your-finnhub-api-key
+      ALPHA_VANTAGE_API_KEY: your-alpha-vantage-api-key
+    ports:
+      - "8005:8005"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - finance_network
+    restart: unless-stopped
+
+  # Export Service
+  export_service:
+    build:
+      context: ./backend
+      dockerfile: services/export/Dockerfile
+    container_name: finance_export_service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://finance_user:finance_password@postgres:5432/finance_db
+      REDIS_URL: redis://:redis_password@redis:6379/5
+      AUTH_SERVICE_URL: http://auth_service:8001
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minio_admin
+      MINIO_SECRET_KEY: minio_password
+    ports:
+      - "8006:8006"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - finance_network
+    restart: unless-stopped
+
+  # Nginx API Gateway
+  nginx:
+    image: nginx:alpine
+    container_name: finance_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - auth_service
+      - finance_service
+      - emi_service
+      - investment_service
+      - market_service
+      - export_service
+    networks:
+      - finance_network
+    restart: unless-stopped
+
+  # Celery Worker for Stock Data Processing
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.celery
+    container_name: finance_celery_worker
+    environment:
+      RABBITMQ_URL: amqp://rabbitmq_user:rabbitmq_password@rabbitmq:5672/
+      REDIS_URL: redis://:redis_password@redis:6379/5
+      REDIS_HOST: redis
+      REDIS_PASSWORD: redis_password
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY:-your_finnhub_key_here}
+      ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY:-your_alpha_vantage_key_here}
+      PYTHONUNBUFFERED: 1
+    command: celery -A workers.stock_tasks worker --loglevel=info --concurrency=4
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - finance_network
+    restart: unless-stopped
+
+  # Celery Beat Scheduler for Periodic Tasks
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.celery
+    container_name: finance_celery_beat
+    environment:
+      RABBITMQ_URL: amqp://rabbitmq_user:rabbitmq_password@rabbitmq:5672/
+      REDIS_URL: redis://:redis_password@redis:6379/5
+      REDIS_HOST: redis
+      REDIS_PASSWORD: redis_password
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY:-your_finnhub_key_here}
+      ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY:-your_alpha_vantage_key_here}
+      PYTHONUNBUFFERED: 1
+    command: celery -A workers.stock_tasks beat --loglevel=info
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - finance_network
+    restart: unless-stopped
+
+  # Frontend (Next.js)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: finance_frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - auth_service
+      - finance_service
+    networks:
+      - finance_network
+    restart: unless-stopped
+
+networks:
+  finance_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  rabbitmq_data:
