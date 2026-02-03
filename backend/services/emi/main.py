@@ -60,6 +60,8 @@ class EMIResponse(BaseModel):
     total_amount: float
     paid_months: int
     remaining_amount: float
+    remaining_principal: float
+    remaining_interest: float
 
 class EMIPaymentResponse(BaseModel):
     id: str
@@ -280,6 +282,17 @@ async def get_emis(
         paid_amount = sum(float(p.amount) for p in paid_payments)
         remaining_amount = float(total_amount) - paid_amount
         
+        # Calculate remaining principal and interest from unpaid payments
+        unpaid_result = await db.execute(
+            select(EMIPayment).where(
+                EMIPayment.emi_id == emi.id,
+                EMIPayment.status == "pending",
+            )
+        )
+        unpaid_payments = unpaid_result.scalars().all()
+        remaining_principal = sum(float(p.principal_component) for p in unpaid_payments)
+        remaining_interest = sum(float(p.interest_component) for p in unpaid_payments)
+        
         response.append(EMIResponse(
             id=str(emi.id),
             loan_type=emi.loan_type,
@@ -295,7 +308,9 @@ async def get_emis(
             total_interest=float(total_interest),
             total_amount=float(total_amount),
             paid_months=paid_months,
-            remaining_amount=remaining_amount
+            remaining_amount=remaining_amount,
+            remaining_principal=remaining_principal,
+            remaining_interest=remaining_interest
         ))
     
     return response
@@ -336,6 +351,17 @@ async def get_emi(
     paid_amount = sum(float(p.amount) for p in paid_payments)
     remaining_amount = float(total_amount) - paid_amount
     
+    # Calculate remaining principal and interest from unpaid payments
+    unpaid_result = await db.execute(
+        select(EMIPayment).where(
+            EMIPayment.emi_id == emi.id,
+            EMIPayment.status == "pending",
+        )
+    )
+    unpaid_payments = unpaid_result.scalars().all()
+    remaining_principal = sum(float(p.principal_component) for p in unpaid_payments)
+    remaining_interest = sum(float(p.interest_component) for p in unpaid_payments)
+    
     return EMIResponse(
         id=str(emi.id),
         loan_type=emi.loan_type,
@@ -351,7 +377,9 @@ async def get_emi(
         total_interest=float(total_interest),
         total_amount=float(total_amount),
         paid_months=paid_months,
-        remaining_amount=remaining_amount
+        remaining_amount=remaining_amount,
+        remaining_principal=remaining_principal,
+        remaining_interest=remaining_interest
     )
 
 @app.put("/emis/{emi_id}")

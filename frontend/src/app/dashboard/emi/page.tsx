@@ -373,8 +373,12 @@ export default function EMIPage() {
                         <span className="font-semibold text-rose-600">{format(emi.total_interest || 0)}</span>
                       </div>
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-slate-500">Remaining Amount</span>
-                        <span className="font-semibold text-blue-600">{format(remainingAmount)}</span>
+                        <span className="text-slate-500">Remaining Principal</span>
+                        <span className="font-semibold text-blue-600">{format(emi.remaining_principal || 0)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-slate-500">Remaining Interest</span>
+                        <span className="font-semibold text-amber-600">{format(emi.remaining_interest || 0)}</span>
                       </div>
                     </div>
 
@@ -588,7 +592,7 @@ export default function EMIPage() {
                   <X className="h-5 w-5" />
                 </Button>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
                 <div className="bg-white rounded-lg p-3">
                   <p className="text-xs text-slate-600">Total Amount</p>
                   <p className="text-lg font-bold text-slate-900">{format(selectedEmi.total_amount || 0)}</p>
@@ -598,8 +602,12 @@ export default function EMIPage() {
                   <p className="text-lg font-bold text-emerald-600">{selectedEmi.paid_months || 0} / {selectedEmi.tenure_months}</p>
                 </div>
                 <div className="bg-white rounded-lg p-3">
-                  <p className="text-xs text-slate-600">Remaining</p>
-                  <p className="text-lg font-bold text-blue-600">{format(selectedEmi.remaining_amount || 0)}</p>
+                  <p className="text-xs text-slate-600">Principal Left</p>
+                  <p className="text-lg font-bold text-blue-600">{format(selectedEmi.remaining_principal || 0)}</p>
+                </div>
+                <div className="bg-white rounded-lg p-3">
+                  <p className="text-xs text-slate-600">Interest Left</p>
+                  <p className="text-lg font-bold text-amber-600">{format(selectedEmi.remaining_interest || 0)}</p>
                 </div>
                 <div className="bg-white rounded-lg p-3">
                   <p className="text-xs text-slate-600">Monthly EMI</p>

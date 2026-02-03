@@ -282,6 +282,8 @@ export interface EMI {
   total_amount?: number
   paid_months?: number
   remaining_amount?: number
+  remaining_principal?: number
+  remaining_interest?: number
 }
 
 export interface EMIPayment {
