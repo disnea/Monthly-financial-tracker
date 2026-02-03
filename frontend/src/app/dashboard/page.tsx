@@ -325,7 +325,7 @@ export default function DashboardPage() {
             ].map((stat, index) => {
               const Icon = stat.icon
               return (
-                <Card key={index} className="border border-slate-200 shadow-lg hover:shadow-xl transition-all duration-300 rounded-2xl overflow-hidden group bg-white">
+                <Card key={index} className="relative border border-slate-200 shadow-lg hover:shadow-xl transition-all duration-300 rounded-2xl overflow-hidden group bg-white">
                   <div className={cn("absolute inset-0 bg-gradient-to-br opacity-30", stat.bgColor)}></div>
                   <CardContent className="p-6 relative z-10">
                     <div className="flex items-center justify-between mb-4">
