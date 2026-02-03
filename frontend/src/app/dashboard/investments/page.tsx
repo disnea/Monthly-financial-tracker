@@ -358,13 +358,13 @@ export default function InvestmentsPage() {
                 <div className="flex items-center gap-4 text-sm text-slate-500">
                   <span>{stockProfile.industry}</span>
                   <span>•</span>
-                  <span>Mkt Cap: ${(stockProfile.marketCap / 1000).toFixed(2)}B</span>
+                  <span>Mkt Cap: {symbol}{(stockProfile.marketCap / 1000).toFixed(2)}B</span>
                 </div>
               </div>
               
               <div className="text-right">
                 <div className="text-5xl font-bold text-white mb-2">
-                  ${stockQuote.price.toFixed(2)}
+                  {symbol}{stockQuote.price.toFixed(2)}
                 </div>
                 <div className={`flex items-center gap-2 text-lg font-semibold ${stockQuote.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                   {stockQuote.change >= 0 ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />}
@@ -372,9 +372,9 @@ export default function InvestmentsPage() {
                   <span>({stockQuote.change_percent >= 0 ? '+' : ''}{stockQuote.change_percent.toFixed(2)}%)</span>
                 </div>
                 <div className="flex gap-4 mt-3 text-xs text-slate-400">
-                  <div>H: <span className="text-white">${stockQuote.high.toFixed(2)}</span></div>
-                  <div>L: <span className="text-white">${stockQuote.low.toFixed(2)}</span></div>
-                  <div>O: <span className="text-white">${stockQuote.open.toFixed(2)}</span></div>
+                  <div>H: <span className="text-white">{symbol}{stockQuote.high.toFixed(2)}</span></div>
+                  <div>L: <span className="text-white">{symbol}{stockQuote.low.toFixed(2)}</span></div>
+                  <div>O: <span className="text-white">{symbol}{stockQuote.open.toFixed(2)}</span></div>
                 </div>
               </div>
 
@@ -445,7 +445,7 @@ export default function InvestmentsPage() {
             <CardTitle className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Total Invested</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-slate-900">₹{totalInvested.toLocaleString('en-IN')}</div>
+            <div className="text-3xl font-bold text-slate-900">{format(totalInvested)}</div>
             <p className="text-xs text-slate-500 mt-1">Initial investment</p>
           </CardContent>
         </Card>
@@ -454,7 +454,7 @@ export default function InvestmentsPage() {
             <CardTitle className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Current Value</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-slate-900">₹{currentValue.toLocaleString('en-IN')}</div>
+            <div className="text-3xl font-bold text-slate-900">{format(currentValue)}</div>
             <p className="text-xs text-slate-500 mt-1">Market value</p>
           </CardContent>
         </Card>
@@ -464,7 +464,7 @@ export default function InvestmentsPage() {
           </CardHeader>
           <CardContent>
             <div className={`text-3xl font-bold ${totalProfitLoss >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-              {totalProfitLoss >= 0 ? '+' : '-'}₹{Math.abs(totalProfitLoss).toLocaleString('en-IN')}
+              {totalProfitLoss >= 0 ? '+' : ''}{format(totalProfitLoss)}
             </div>
             <p className="text-xs text-slate-500 mt-1">
               {totalProfitLoss >= 0 ? 'Profit' : 'Loss'}
