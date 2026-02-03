@@ -254,9 +254,26 @@ async def update_profile(
     request: Request,
     db: AsyncSession = Depends(get_db)
 ):
-    user_data = get_current_user(request)
+    # Extract and verify JWT token
+    authorization = request.headers.get("Authorization")
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authorization header"
+        )
     
-    result = await db.execute(select(User).where(User.id == uuid.UUID(user_data["user_id"])))
+    token = authorization.split(" ")[1]
+    
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        user_id = payload.get("user_id")
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+    
+    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
     user = result.scalar_one_or_none()
     
     if not user:
