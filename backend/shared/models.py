@@ -1,6 +1,7 @@
 from sqlalchemy import Column, String, Integer, Float, Boolean, Date, TIMESTAMP, Text, DECIMAL, ARRAY, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from shared.database import Base
 import uuid
 
@@ -51,6 +52,9 @@ class Category(Base):
     parent_id = Column(UUID(as_uuid=True), ForeignKey('categories.id'))
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    expenses = relationship("Expense", back_populates="category")
 
 class Expense(Base):
     __tablename__ = "expenses"
@@ -74,6 +78,9 @@ class Expense(Base):
     synced = Column(Boolean, default=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    category = relationship("Category", back_populates="expenses")
 
 class EMI(Base):
     __tablename__ = "emis"
