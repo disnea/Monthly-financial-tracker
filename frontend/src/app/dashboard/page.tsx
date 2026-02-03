@@ -145,7 +145,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/20 -m-8 p-8">
       {/* Hero Section - Inspired by Mint/YNAB */}
       <div className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-purple-500/5 to-pink-500/5 rounded-3xl"></div>
