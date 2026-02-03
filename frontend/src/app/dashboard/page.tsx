@@ -247,7 +247,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Quick Actions Bar */}
-            <div className="mt-6 pt-6 border-t border-slate-200/50">
+            <div className="mt-6 pt-6 border-t border-slate-200">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {[
                   { label: 'Add Expense', href: '/dashboard/expenses', icon: Plus, color: 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100' },
@@ -325,8 +325,8 @@ export default function DashboardPage() {
             ].map((stat, index) => {
               const Icon = stat.icon
               return (
-                <Card key={index} className="border-none shadow-lg hover:shadow-xl transition-all duration-300 rounded-2xl overflow-hidden group">
-                  <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50", stat.bgColor)}></div>
+                <Card key={index} className="border border-slate-200 shadow-lg hover:shadow-xl transition-all duration-300 rounded-2xl overflow-hidden group bg-white">
+                  <div className={cn("absolute inset-0 bg-gradient-to-br opacity-30", stat.bgColor)}></div>
                   <CardContent className="p-6 relative z-10">
                     <div className="flex items-center justify-between mb-4">
                       <div className={cn("w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform", stat.color)}>
@@ -348,8 +348,8 @@ export default function DashboardPage() {
           {/* Charts Section */}
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Spending Breakdown */}
-            <Card className="border-none shadow-xl rounded-3xl">
-              <CardHeader className="border-b border-slate-200/50 bg-gradient-to-r from-indigo-50/50 to-purple-50/50">
+            <Card className="border border-slate-200 shadow-xl rounded-3xl bg-white">
+              <CardHeader className="border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-purple-50">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md">
@@ -418,8 +418,8 @@ export default function DashboardPage() {
             </Card>
 
             {/* Cash Flow Trend */}
-            <Card className="border-none shadow-xl rounded-3xl">
-              <CardHeader className="border-b border-slate-200/50 bg-gradient-to-r from-emerald-50/50 to-teal-50/50">
+            <Card className="border border-slate-200 shadow-xl rounded-3xl bg-white">
+              <CardHeader className="border-b border-slate-200 bg-gradient-to-r from-emerald-50 to-teal-50">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md">
@@ -485,8 +485,8 @@ export default function DashboardPage() {
           </div>
 
           {/* Recent Activity */}
-          <Card className="border-none shadow-xl rounded-3xl">
-            <CardHeader className="border-b border-slate-200/50 bg-gradient-to-r from-slate-50 to-slate-100/50">
+          <Card className="border border-slate-200 shadow-xl rounded-3xl bg-white">
+            <CardHeader className="border-b border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center shadow-md">
@@ -515,7 +515,7 @@ export default function DashboardPage() {
               ) : (
                 <div className="space-y-2">
                   {recentExpenses.map((exp, idx) => (
-                    <div key={exp.id} className="flex items-center justify-between p-4 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors border border-slate-200/50">
+                    <div key={exp.id} className="flex items-center justify-between p-4 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors border border-slate-200">
                       <div className="flex items-center gap-4">
                         <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
                           {idx + 1}
