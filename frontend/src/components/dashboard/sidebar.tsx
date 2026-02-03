@@ -40,6 +40,19 @@ interface NavItem {
   shortcut?: string
 }
 
+interface Notification {
+  id: string
+  title: string
+  message: string
+  type: 'info' | 'warning' | 'success' | 'error'
+  read: boolean
+  timestamp: Date
+  action?: {
+    label: string
+    href: string
+  }
+}
+
 const navigationSections: NavSection[] = [
   {
     title: 'Overview',
@@ -109,14 +122,83 @@ const navigationSections: NavSection[] = [
 export function Sidebar() {
   const [mounted, setMounted] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
-  const [notifications, setNotifications] = useState(2)
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [notifications, setNotifications] = useState<Notification[]>([])
   const pathname = usePathname()
   const router = useRouter()
   const { user, clearAuth } = useAuthStore()
 
   useEffect(() => {
     setMounted(true)
+    // Fetch notifications on mount
+    fetchNotifications()
   }, [])
+
+  const fetchNotifications = async () => {
+    // Sample notifications - replace with actual API call
+    const sampleNotifications: Notification[] = [
+      {
+        id: '1',
+        title: 'Budget Alert',
+        message: 'You have spent 85% of your monthly budget for Food & Dining',
+        type: 'warning',
+        read: false,
+        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
+        action: { label: 'View Budget', href: '/dashboard/budgets' }
+      },
+      {
+        id: '2',
+        title: 'Investment Update',
+        message: 'Your portfolio gained 2.5% this week',
+        type: 'success',
+        read: false,
+        timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000),
+        action: { label: 'View Portfolio', href: '/dashboard/investments' }
+      },
+      {
+        id: '3',
+        title: 'EMI Due Soon',
+        message: 'Home Loan EMI of ₹45,000 is due in 3 days',
+        type: 'info',
+        read: true,
+        timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        action: { label: 'View EMIs', href: '/dashboard/emi' }
+      },
+    ]
+    setNotifications(sampleNotifications)
+  }
+
+  const markAsRead = (id: string) => {
+    setNotifications(prev => 
+      prev.map(n => n.id === id ? { ...n, read: true } : n)
+    )
+  }
+
+  const markAllAsRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+  }
+
+  const unreadCount = notifications.filter(n => !n.read).length
+
+  const getNotificationIcon = (type: Notification['type']) => {
+    switch (type) {
+      case 'success': return '✅'
+      case 'warning': return '⚠️'
+      case 'error': return '❌'
+      default: return 'ℹ️'
+    }
+  }
+
+  const formatTimestamp = (date: Date) => {
+    const now = new Date()
+    const diff = now.getTime() - date.getTime()
+    const hours = Math.floor(diff / (1000 * 60 * 60))
+    const days = Math.floor(hours / 24)
+    
+    if (days > 0) return `${days}d ago`
+    if (hours > 0) return `${hours}h ago`
+    return 'Just now'
+  }
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -186,8 +268,8 @@ export function Sidebar() {
         )}
         
         {collapsed && (
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg flex items-center justify-center">
-            <Wallet className="h-5 w-5 text-white" />
+          <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg flex items-center justify-center">
+            <Wallet className="h-5 w-5 text-white flex-shrink-0" />
           </div>
         )}
         
@@ -205,18 +287,132 @@ export function Sidebar() {
         </Button>
       </div>
 
-      {/* Notifications Badge - Only when not collapsed */}
-      {!collapsed && notifications > 0 && (
-        <div className="px-4 pt-4">
-          <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 flex items-center gap-3">
+      {/* Notifications Badge - Shows when not collapsed */}
+      {!collapsed && unreadCount > 0 && (
+        <div className="px-4 pt-4 relative">
+          <button
+            onClick={() => setShowNotifications(!showNotifications)}
+            className="w-full bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 flex items-center gap-3 hover:bg-blue-500/20 transition-all cursor-pointer"
+          >
             <Bell className="h-4 w-4 text-blue-400 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-slate-300 truncate">{notifications} new notifications</p>
+            <div className="flex-1 min-w-0 text-left">
+              <p className="text-xs text-slate-300 truncate">{unreadCount} new notification{unreadCount !== 1 ? 's' : ''}</p>
             </div>
-            <Badge className="bg-blue-500 text-white text-xs rounded-full px-2">
-              {notifications}
+            <Badge className="bg-blue-500 text-white text-xs rounded-full px-2 flex-shrink-0">
+              {unreadCount}
             </Badge>
-          </div>
+          </button>
+
+          {/* Notifications Dropdown */}
+          {showNotifications && (
+            <div className="absolute left-4 right-4 top-full mt-2 z-50">
+              <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden max-h-[400px] flex flex-col">
+                {/* Header */}
+                <div className="p-3 border-b border-slate-700 flex items-center justify-between bg-slate-900/50">
+                  <h3 className="text-sm font-semibold text-white">Notifications</h3>
+                  <div className="flex items-center gap-2">
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={markAllAsRead}
+                        className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setShowNotifications(false)}
+                      className="text-slate-400 hover:text-white transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Notification List */}
+                <div className="overflow-y-auto custom-scrollbar">
+                  {notifications.length === 0 ? (
+                    <div className="p-6 text-center">
+                      <Bell className="h-8 w-8 text-slate-600 mx-auto mb-2" />
+                      <p className="text-sm text-slate-400">No notifications</p>
+                    </div>
+                  ) : (
+                    notifications.map((notification) => (
+                      <div
+                        key={notification.id}
+                        className={cn(
+                          "p-3 border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors",
+                          !notification.read && "bg-blue-500/5"
+                        )}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="text-lg flex-shrink-0">{getNotificationIcon(notification.type)}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <h4 className={cn(
+                                "text-xs font-semibold truncate",
+                                !notification.read ? "text-white" : "text-slate-300"
+                              )}>
+                                {notification.title}
+                              </h4>
+                              <span className="text-[10px] text-slate-500 flex-shrink-0">
+                                {formatTimestamp(notification.timestamp)}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 leading-relaxed mb-2">
+                              {notification.message}
+                            </p>
+                            <div className="flex items-center gap-2">
+                              {notification.action && (
+                                <Link
+                                  href={notification.action.href}
+                                  onClick={() => {
+                                    markAsRead(notification.id)
+                                    setShowNotifications(false)
+                                  }}
+                                  className="text-[10px] text-blue-400 hover:text-blue-300 font-medium"
+                                >
+                                  {notification.action.label} →
+                                </Link>
+                              )}
+                              {!notification.read && (
+                                <button
+                                  onClick={() => markAsRead(notification.id)}
+                                  className="text-[10px] text-slate-500 hover:text-slate-400"
+                                >
+                                  Mark as read
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Notification Bell Icon - Shows in collapsed mode */}
+      {collapsed && unreadCount > 0 && (
+        <div className="flex justify-center pt-3">
+          <button
+            onClick={() => setShowNotifications(!showNotifications)}
+            className="relative p-2 hover:bg-slate-700/50 rounded-lg transition-all group"
+            title="Notifications"
+          >
+            <Bell className="h-5 w-5 text-blue-400" />
+            <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+            
+            {/* Tooltip */}
+            <div className="absolute left-full ml-2 px-3 py-2 bg-slate-800 text-white text-sm rounded-lg shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 border border-slate-700 top-0">
+              <div className="font-medium text-xs">{unreadCount} new notification{unreadCount !== 1 ? 's' : ''}</div>
+            </div>
+          </button>
         </div>
       )}
 
