@@ -148,7 +148,7 @@ export default function InvestmentsPage() {
   const fetchStockData = async (symbol: string) => {
     setLoadingStock(true)
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('auth_token')
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost/api'
       
       console.log('Fetching stock data for:', symbol)
@@ -158,13 +158,13 @@ export default function InvestmentsPage() {
       const [quoteRes, profileRes] = await Promise.all([
         fetch(`${baseUrl}/investment/stocks/${symbol}/quote`, {
           headers: { 
-            'Authorization': `Bearer ${token}`,
+            'Authorization': token ? `Bearer ${token}` : '',
             'Content-Type': 'application/json'
           }
         }),
         fetch(`${baseUrl}/investment/stocks/${symbol}/profile`, {
           headers: { 
-            'Authorization': `Bearer ${token}`,
+            'Authorization': token ? `Bearer ${token}` : '',
             'Content-Type': 'application/json'
           }
         })
@@ -199,7 +199,7 @@ export default function InvestmentsPage() {
   const fetchChartData = async (symbol: string, tf: string) => {
     console.log(`📊 Fetching chart data for ${symbol} with timeframe: ${tf}`)
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('auth_token')
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost/api'
       let url = `${baseUrl}/investment/stocks/${symbol}/history?`
       
@@ -218,7 +218,7 @@ export default function InvestmentsPage() {
 
       console.log(`📡 Chart API URL: ${url}`)
       const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       })
       console.log(`📈 Chart response status: ${response.status}`)
       
