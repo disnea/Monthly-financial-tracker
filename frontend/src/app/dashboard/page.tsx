@@ -3,13 +3,19 @@
 import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ArrowUpRight, ArrowDownRight, Wallet, TrendingUp, CreditCard, PieChart, DollarSign, Activity, Calendar, ChevronRight, Sparkles } from 'lucide-react'
+import { 
+  ArrowUpRight, ArrowDownRight, Wallet, TrendingUp, CreditCard, PieChart, 
+  DollarSign, Activity, Calendar, ChevronRight, Sparkles, Eye, EyeOff,
+  Download, RefreshCw, Bell, Settings, Plus, ArrowRight, TrendingDown,
+  Target, Clock, AlertCircle, CheckCircle2
+} from 'lucide-react'
 import { useAuthStore } from '@/lib/store'
 import { useCurrency } from '@/hooks/useCurrency'
 import { expenseApi, emiApi, investmentApi, budgetApi } from '@/lib/api'
 import { toast } from 'sonner'
-import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Tooltip, Legend, LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar, Area, AreaChart } from 'recharts'
+import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Tooltip, Legend, AreaChart, Area, XAxis, YAxis, CartesianGrid, BarChart, Bar } from 'recharts'
 import Link from 'next/link'
+import { cn } from '@/lib/utils'
 
 export default function DashboardPage() {
   const { currency, symbol, format } = useCurrency()
@@ -17,6 +23,7 @@ export default function DashboardPage() {
   const token = useAuthStore((state) => state.token)
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated())
   const [loading, setLoading] = useState(true)
+  const [showBalance, setShowBalance] = useState(true)
   const [stats, setStats] = useState({
     totalExpenses: 0,
     expenseCount: 0,
@@ -68,7 +75,6 @@ export default function DashboardPage() {
 
       setRecentExpenses(expenses.slice(0, 5))
 
-      // Process expense categories
       if (expenses.length > 0) {
         const categoryMap = new Map<string, number>()
         const categoryColors: { [key: string]: string } = {
@@ -107,12 +113,12 @@ export default function DashboardPage() {
   }
 
   const monthlyTrendData = [
-    { month: 'Jan', expenses: 45000, income: 85000, investments: 25000 },
-    { month: 'Feb', expenses: 52000, income: 85000, investments: 28000 },
-    { month: 'Mar', expenses: 48000, income: 90000, investments: 32000 },
-    { month: 'Apr', expenses: 55000, income: 90000, investments: 30000 },
-    { month: 'May', expenses: 58000, income: 95000, investments: 35000 },
-    { month: 'Jun', expenses: 51000, income: 95000, investments: 38000 },
+    { month: 'Jan', income: 85000, expenses: 45000, savings: 40000 },
+    { month: 'Feb', income: 85000, expenses: 52000, savings: 33000 },
+    { month: 'Mar', income: 90000, expenses: 48000, savings: 42000 },
+    { month: 'Apr', income: 90000, expenses: 55000, savings: 35000 },
+    { month: 'May', income: 95000, expenses: 58000, savings: 37000 },
+    { month: 'Jun', income: 95000, expenses: 51000, savings: 44000 },
   ]
 
   const sampleStats = {
@@ -127,167 +133,242 @@ export default function DashboardPage() {
   }
 
   const displayStats = stats.expenseCount > 0 ? stats : sampleStats
+  const netWorth = (displayStats.investmentValue - displayStats.totalExpenses) + displayStats.budgetTotal
+  const cashFlow = 95000 - displayStats.totalExpenses - displayStats.emiMonthly
+  const budgetUtilization = displayStats.budgetTotal > 0 ? (displayStats.budgetUsed / displayStats.budgetTotal) * 100 : 0
 
   const getGreeting = () => {
     const hour = new Date().getHours()
-    if (hour < 12) return 'Good morning'
-    if (hour < 18) return 'Good afternoon'
-    return 'Good evening'
+    if (hour < 12) return 'Good Morning'
+    if (hour < 18) return 'Good Afternoon'
+    return 'Good Evening'
   }
 
-  const quickActions = [
-    { label: 'Add Expense', href: '/dashboard/expenses', icon: Wallet, color: 'from-indigo-500 to-purple-600' },
-    { label: 'Track EMI', href: '/dashboard/emi', icon: CreditCard, color: 'from-blue-500 to-cyan-600' },
-    { label: 'View Budgets', href: '/dashboard/budgets', icon: PieChart, color: 'from-amber-500 to-orange-600' },
-    { label: 'Investments', href: '/dashboard/investments', icon: TrendingUp, color: 'from-emerald-500 to-teal-600' },
-  ]
-
   return (
-    <div className="space-y-6">
-      {/* Modern Light Header */}
-      <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-slate-200/50 shadow-sm -mx-8 -mt-8 px-8 py-6 mb-6">
-        <div>
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-2xl shadow-lg ring-4 ring-indigo-100">
-                {user?.full_name?.charAt(0).toUpperCase() || 'U'}
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
-                  {getGreeting()}, {user?.full_name?.split(' ')[0] || 'there'}!
-                </h1>
-                <p className="text-slate-600 text-sm mt-1 flex items-center gap-2">
-                  <Calendar className="h-3.5 w-3.5" />
-                  {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-                </p>
-              </div>
-            </div>
-            
-            <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-4 shadow-xl text-white min-w-[220px]">
-              <div className="flex items-center gap-2 mb-1">
-                <Sparkles className="h-4 w-4" />
-                <p className="text-xs font-semibold uppercase tracking-wider opacity-90">Net Worth</p>
-              </div>
-              <p className="text-3xl font-bold">
-                {format((displayStats.investmentValue - displayStats.totalExpenses) + displayStats.budgetTotal)}
-              </p>
-              <div className="flex items-center gap-1 text-xs mt-2 opacity-90">
-                <TrendingUp className="h-3 w-3" />
-                <span>Updated now</span>
-              </div>
-            </div>
-          </div>
+    <div className="space-y-8">
+      {/* Hero Section - Inspired by Mint/YNAB */}
+      <div className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-purple-500/5 to-pink-500/5 rounded-3xl"></div>
+        <Card className="border-none shadow-xl rounded-3xl bg-white/80 backdrop-blur-sm relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-indigo-500/10 to-purple-500/10 rounded-full blur-3xl"></div>
+          
+          <CardContent className="p-8 relative z-10">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+              {/* Left: Greeting & Net Worth */}
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl shadow-lg">
+                    {user?.full_name?.charAt(0).toUpperCase() || 'U'}
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold text-slate-900">
+                      {getGreeting()}, {user?.full_name?.split(' ')[0] || 'there'}!
+                    </h1>
+                    <p className="text-sm text-slate-600 flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5" />
+                      {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                    </p>
+                  </div>
+                </div>
 
-          {/* Quick Actions */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
-            {quickActions.map((action) => {
-              const Icon = action.icon
-              return (
-                <Link href={action.href} key={action.label}>
-                  <Button 
-                    variant="outline"
-                    className="w-full h-auto py-3 px-4 rounded-xl border-slate-200 hover:border-slate-300 hover:shadow-md transition-all group"
-                  >
-                    <div className="flex items-center gap-3 w-full">
-                      <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${action.color} flex items-center justify-center text-white shadow-sm group-hover:scale-110 transition-transform`}>
-                        <Icon className="h-5 w-5" />
-                      </div>
-                      <div className="text-left flex-1">
-                        <p className="text-sm font-semibold text-slate-900">{action.label}</p>
-                        <ChevronRight className="h-3 w-3 text-slate-400 inline" />
-                      </div>
+                {/* Net Worth Display */}
+                <div className="bg-gradient-to-r from-slate-50 to-slate-100/50 rounded-2xl p-5 border border-slate-200/50">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-indigo-600" />
+                      <span className="text-sm font-semibold text-slate-600 uppercase tracking-wider">Net Worth</span>
                     </div>
-                  </Button>
-                </Link>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowBalance(!showBalance)}
+                      className="h-8 w-8 p-0"
+                    >
+                      {showBalance ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  <div className="flex items-baseline gap-3">
+                    <p className="text-4xl font-bold text-slate-900">
+                      {showBalance ? format(netWorth) : '••••••'}
+                    </p>
+                    <div className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg">
+                      <TrendingUp className="h-3.5 w-3.5" />
+                      <span className="text-sm font-semibold">+8.2%</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">vs last month</p>
+                </div>
+              </div>
+
+              {/* Right: Quick Stats Grid */}
+              <div className="grid grid-cols-2 gap-4 lg:w-[420px]">
+                <div className="bg-white rounded-xl p-4 border border-slate-200/50 shadow-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+                      <TrendingUp className="h-4 w-4 text-emerald-600" />
+                    </div>
+                    <span className="text-xs font-medium text-slate-600">Cash Flow</span>
+                  </div>
+                  <p className="text-xl font-bold text-slate-900">{format(cashFlow)}</p>
+                  <p className="text-xs text-slate-500 mt-1">This month</p>
+                </div>
+
+                <div className="bg-white rounded-xl p-4 border border-slate-200/50 shadow-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                      <CreditCard className="h-4 w-4 text-blue-600" />
+                    </div>
+                    <span className="text-xs font-medium text-slate-600">EMI/Month</span>
+                  </div>
+                  <p className="text-xl font-bold text-slate-900">{format(displayStats.emiMonthly)}</p>
+                  <p className="text-xs text-slate-500 mt-1">{displayStats.emiCount} active loans</p>
+                </div>
+
+                <div className="bg-white rounded-xl p-4 border border-slate-200/50 shadow-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+                      <Target className="h-4 w-4 text-amber-600" />
+                    </div>
+                    <span className="text-xs font-medium text-slate-600">Budget Used</span>
+                  </div>
+                  <p className="text-xl font-bold text-slate-900">{budgetUtilization.toFixed(0)}%</p>
+                  <p className="text-xs text-slate-500 mt-1">{format(displayStats.budgetUsed)} of {format(displayStats.budgetTotal)}</p>
+                </div>
+
+                <div className="bg-white rounded-xl p-4 border border-slate-200/50 shadow-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
+                      <Activity className="h-4 w-4 text-purple-600" />
+                    </div>
+                    <span className="text-xs font-medium text-slate-600">Investments</span>
+                  </div>
+                  <p className="text-xl font-bold text-slate-900">{format(displayStats.investmentValue)}</p>
+                  <p className="text-xs text-emerald-600 mt-1">+{displayStats.investmentReturn.toFixed(1)}% return</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Actions Bar */}
+            <div className="mt-6 pt-6 border-t border-slate-200/50">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: 'Add Expense', href: '/dashboard/expenses', icon: Plus, color: 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100' },
+                  { label: 'Track EMI', href: '/dashboard/emi', icon: CreditCard, color: 'text-blue-600 bg-blue-50 hover:bg-blue-100' },
+                  { label: 'Set Budget', href: '/dashboard/budgets', icon: Target, color: 'text-amber-600 bg-amber-50 hover:bg-amber-100' },
+                  { label: 'View Investments', href: '/dashboard/investments', icon: TrendingUp, color: 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100' },
+                ].map((action) => {
+                  const Icon = action.icon
+                  return (
+                    <Link href={action.href} key={action.label}>
+                      <Button 
+                        variant="ghost"
+                        className={cn("w-full justify-start gap-2 h-auto py-3 px-4 rounded-xl transition-all", action.color)}
+                      >
+                        <Icon className="h-4 w-4" />
+                        <span className="text-sm font-semibold">{action.label}</span>
+                        <ChevronRight className="h-3.5 w-3.5 ml-auto" />
+                      </Button>
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-slate-600">Loading your financial data...</p>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Main Stats Row */}
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {[
+              {
+                title: 'Total Expenses',
+                value: format(displayStats.totalExpenses),
+                change: `${displayStats.expenseCount} transactions`,
+                trend: 'down',
+                icon: Wallet,
+                color: 'from-rose-500 to-pink-600',
+                bgColor: 'from-rose-50 to-pink-50'
+              },
+              {
+                title: 'Monthly EMI',
+                value: format(displayStats.emiMonthly),
+                change: `${displayStats.emiCount} active loans`,
+                trend: 'neutral',
+                icon: CreditCard,
+                color: 'from-blue-500 to-cyan-600',
+                bgColor: 'from-blue-50 to-cyan-50'
+              },
+              {
+                title: 'Investments',
+                value: format(displayStats.investmentValue),
+                change: `+${displayStats.investmentReturn.toFixed(1)}% return`,
+                trend: 'up',
+                icon: TrendingUp,
+                color: 'from-emerald-500 to-teal-600',
+                bgColor: 'from-emerald-50 to-teal-50'
+              },
+              {
+                title: 'Budget Status',
+                value: `${budgetUtilization.toFixed(0)}%`,
+                change: `${format(displayStats.budgetUsed)} spent`,
+                trend: budgetUtilization > 80 ? 'warning' : 'neutral',
+                icon: PieChart,
+                color: 'from-amber-500 to-orange-600',
+                bgColor: 'from-amber-50 to-orange-50'
+              },
+            ].map((stat, index) => {
+              const Icon = stat.icon
+              return (
+                <Card key={index} className="border-none shadow-lg hover:shadow-xl transition-all duration-300 rounded-2xl overflow-hidden group">
+                  <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50", stat.bgColor)}></div>
+                  <CardContent className="p-6 relative z-10">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className={cn("w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform", stat.color)}>
+                        <Icon className="h-6 w-6 text-white" />
+                      </div>
+                      {stat.trend === 'up' && <ArrowUpRight className="h-5 w-5 text-emerald-600" />}
+                      {stat.trend === 'down' && <ArrowDownRight className="h-5 w-5 text-rose-600" />}
+                      {stat.trend === 'warning' && <AlertCircle className="h-5 w-5 text-amber-600" />}
+                    </div>
+                    <h3 className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-2">{stat.title}</h3>
+                    <p className="text-3xl font-bold text-slate-900 mb-1">{stat.value}</p>
+                    <p className="text-xs text-slate-500">{stat.change}</p>
+                  </CardContent>
+                </Card>
               )
             })}
           </div>
-        </div>
-      </div>
 
-      {/* Main Content */}
-      {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-slate-600">Loading dashboard...</p>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {/* Stats Cards */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {[
-                {
-                  title: 'Total Expenses',
-                  value: format(displayStats.totalExpenses),
-                  subtitle: `${displayStats.expenseCount} transactions`,
-                  icon: Wallet,
-                  gradient: 'from-rose-500 to-pink-600',
-                  bgGradient: 'from-rose-50 to-pink-50'
-                },
-                {
-                  title: 'Active EMIs',
-                  value: `${displayStats.emiCount} Loans`,
-                  subtitle: `${format(displayStats.emiMonthly)}/month`,
-                  icon: CreditCard,
-                  gradient: 'from-blue-500 to-cyan-600',
-                  bgGradient: 'from-blue-50 to-cyan-50'
-                },
-                {
-                  title: 'Investments',
-                  value: format(displayStats.investmentValue),
-                  subtitle: `${displayStats.investmentReturn >= 0 ? '+' : ''}${displayStats.investmentReturn.toFixed(1)}% return`,
-                  icon: TrendingUp,
-                  gradient: 'from-emerald-500 to-teal-600',
-                  bgGradient: 'from-emerald-50 to-teal-50'
-                },
-                {
-                  title: 'Budget Used',
-                  value: format(displayStats.budgetUsed),
-                  subtitle: `of ${format(displayStats.budgetTotal)}`,
-                  icon: PieChart,
-                  gradient: 'from-amber-500 to-orange-600',
-                  bgGradient: 'from-amber-50 to-orange-50'
-                },
-              ].map((stat, index) => {
-                const Icon = stat.icon
-                return (
-                  <Card key={index} className="border-none shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden group rounded-2xl">
-                    <div className={`absolute inset-0 bg-gradient-to-br ${stat.bgGradient} opacity-50`}></div>
-                    <CardContent className="p-6 relative z-10">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${stat.gradient} flex items-center justify-center text-white shadow-md group-hover:scale-110 transition-transform`}>
-                          <Icon className="h-6 w-6" />
-                        </div>
-                      </div>
-                      <h3 className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-2">{stat.title}</h3>
-                      <p className="text-3xl font-bold text-slate-900 mb-1">{stat.value}</p>
-                      <p className="text-xs text-slate-500">{stat.subtitle}</p>
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
-
-            {/* Charts Row */}
-            <div className="grid gap-6 md:grid-cols-2">
-              {/* Expense Breakdown */}
-              <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
-                <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-slate-200/50">
+          {/* Charts Section */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* Spending Breakdown */}
+            <Card className="border-none shadow-xl rounded-3xl">
+              <CardHeader className="border-b border-slate-200/50 bg-gradient-to-r from-indigo-50/50 to-purple-50/50">
+                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-md">
-                      <PieChart className="h-5 w-5" />
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md">
+                      <PieChart className="h-5 w-5 text-white" />
                     </div>
                     <div>
-                      <CardTitle className="text-lg font-bold text-slate-900">Expense Breakdown</CardTitle>
-                      <CardDescription className="text-xs">Spending by category</CardDescription>
+                      <CardTitle className="text-lg font-bold text-slate-900">Spending Breakdown</CardTitle>
+                      <CardDescription className="text-xs">By category this month</CardDescription>
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  {expensePieData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={280}>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6">
+                {expensePieData.length > 0 ? (
+                  <>
+                    <ResponsiveContainer width="100%" height={240}>
                       <RechartsPie>
                         <Pie
                           data={expensePieData}
@@ -295,7 +376,7 @@ export default function DashboardPage() {
                           cy="50%"
                           labelLine={false}
                           label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
-                          outerRadius={100}
+                          outerRadius={90}
                           innerRadius={50}
                           fill="#8884d8"
                           dataKey="value"
@@ -310,7 +391,7 @@ export default function DashboardPage() {
                             if (active && payload && payload[0] && payload[0].value) {
                               return (
                                 <div className="bg-white border border-slate-200 rounded-xl shadow-lg p-3">
-                                  <p className="font-semibold text-sm text-slate-900">{payload[0].payload.name}</p>
+                                  <p className="font-semibold text-sm">{payload[0].payload.name}</p>
                                   <p className="text-lg font-bold text-slate-700">{format(payload[0].value as number)}</p>
                                 </div>
                               )
@@ -318,133 +399,149 @@ export default function DashboardPage() {
                             return null
                           }}
                         />
-                        <Legend 
-                          verticalAlign="bottom"
-                          height={36}
-                          iconType="circle"
-                          wrapperStyle={{ fontSize: '12px', paddingTop: '16px' }}
-                        />
                       </RechartsPie>
                     </ResponsiveContainer>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-12 text-center">
-                      <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3">
-                        <PieChart className="h-8 w-8 text-slate-400" />
-                      </div>
-                      <p className="text-slate-600 font-medium">No expense data</p>
-                      <p className="text-sm text-slate-500">Add expenses to see breakdown</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Monthly Trend */}
-              <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
-                <CardHeader className="bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-slate-200/50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-md">
-                      <Activity className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-lg font-bold text-slate-900">Monthly Trends</CardTitle>
-                      <CardDescription className="text-xs">Income vs expenses</CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  <ResponsiveContainer width="100%" height={280}>
-                    <AreaChart data={monthlyTrendData}>
-                      <defs>
-                        <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis 
-                        dataKey="month" 
-                        stroke="#94a3b8" 
-                        style={{ fontSize: '12px' }}
-                      />
-                      <YAxis 
-                        stroke="#94a3b8" 
-                        style={{ fontSize: '12px' }}
-                        tickFormatter={(value) => `${(value/1000)}k`}
-                      />
-                      <Tooltip 
-                        content={({ active, payload }) => {
-                          if (active && payload && payload.length) {
-                            return (
-                              <div className="bg-white border border-slate-200 rounded-xl shadow-lg p-3">
-                                <p className="font-semibold text-sm text-slate-900 mb-2">{payload[0].payload.month}</p>
-                                {payload.map((entry: any) => (
-                                  <div key={entry.name} className="flex items-center justify-between gap-3 text-xs">
-                                    <span className="capitalize">{entry.name}:</span>
-                                    <span className="font-bold">{format(entry.value)}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )
-                          }
-                          return null
-                        }}
-                      />
-                      <Area type="monotone" dataKey="income" stroke="#10b981" strokeWidth={2} fill="url(#colorIncome)" />
-                      <Area type="monotone" dataKey="expenses" stroke="#f43f5e" strokeWidth={2} fill="url(#colorExpense)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Recent Expenses */}
-            <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
-              <CardHeader className="bg-gradient-to-r from-rose-50 to-pink-50 border-b border-slate-200/50">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center text-white shadow-md">
-                    <Wallet className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg font-bold text-slate-900">Recent Expenses</CardTitle>
-                    <CardDescription className="text-xs">Latest 5 transactions</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-4">
-                {recentExpenses.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3">
-                      <Wallet className="h-8 w-8 text-slate-400" />
-                    </div>
-                    <p className="text-slate-600 font-medium">No recent expenses</p>
-                    <p className="text-sm text-slate-500">Start tracking your spending</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {recentExpenses.map((exp, idx) => (
-                      <div key={exp.id} className="flex items-center justify-between p-4 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center text-white font-bold text-sm">
-                            {idx + 1}
-                          </div>
-                          <div>
-                            <p className="font-semibold text-sm text-slate-900">{exp.description}</p>
-                            <p className="text-xs text-slate-500">{new Date(exp.transaction_date).toLocaleDateString()}</p>
-                          </div>
+                    <div className="grid grid-cols-2 gap-2 mt-4">
+                      {expensePieData.map((cat) => (
+                        <div key={cat.name} className="flex items-center gap-2 p-2 rounded-lg bg-slate-50">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }}></div>
+                          <span className="text-xs font-medium text-slate-700 truncate">{cat.name}</span>
                         </div>
-                        <p className="font-bold text-rose-600">{format(exp.amount)}</p>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <PieChart className="h-12 w-12 text-slate-300 mb-3" />
+                    <p className="text-slate-600 font-medium">No expense data</p>
+                    <p className="text-sm text-slate-500">Start tracking to see breakdown</p>
                   </div>
                 )}
               </CardContent>
             </Card>
+
+            {/* Cash Flow Trend */}
+            <Card className="border-none shadow-xl rounded-3xl">
+              <CardHeader className="border-b border-slate-200/50 bg-gradient-to-r from-emerald-50/50 to-teal-50/50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md">
+                      <Activity className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-lg font-bold text-slate-900">Cash Flow</CardTitle>
+                      <CardDescription className="text-xs">Income vs expenses</CardDescription>
+                    </div>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <ResponsiveContainer width="100%" height={240}>
+                  <AreaChart data={monthlyTrendData}>
+                    <defs>
+                      <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="month" stroke="#94a3b8" style={{ fontSize: '12px' }} />
+                    <YAxis stroke="#94a3b8" style={{ fontSize: '12px' }} tickFormatter={(value) => `${(value/1000)}k`} />
+                    <Tooltip 
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="bg-white border border-slate-200 rounded-xl shadow-lg p-3">
+                              <p className="font-semibold text-sm mb-2">{payload[0].payload.month}</p>
+                              {payload.map((entry: any) => (
+                                <div key={entry.name} className="flex items-center justify-between gap-3 text-xs mb-1">
+                                  <span className="capitalize">{entry.name}:</span>
+                                  <span className="font-bold">{format(entry.value)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )
+                        }
+                        return null
+                      }}
+                    />
+                    <Area type="monotone" dataKey="income" stroke="#10b981" strokeWidth={2} fill="url(#colorIncome)" />
+                    <Area type="monotone" dataKey="expenses" stroke="#f43f5e" strokeWidth={2} fill="url(#colorExpense)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+                <div className="flex items-center justify-center gap-6 mt-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                    <span className="text-xs font-medium text-slate-600">Income</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-rose-500"></div>
+                    <span className="text-xs font-medium text-slate-600">Expenses</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        )}
+
+          {/* Recent Activity */}
+          <Card className="border-none shadow-xl rounded-3xl">
+            <CardHeader className="border-b border-slate-200/50 bg-gradient-to-r from-slate-50 to-slate-100/50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center shadow-md">
+                    <Clock className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg font-bold text-slate-900">Recent Transactions</CardTitle>
+                    <CardDescription className="text-xs">Latest 5 expenses</CardDescription>
+                  </div>
+                </div>
+                <Link href="/dashboard/expenses">
+                  <Button variant="ghost" size="sm" className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50">
+                    View All
+                    <ArrowRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-4">
+              {recentExpenses.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <Wallet className="h-12 w-12 text-slate-300 mb-3" />
+                  <p className="text-slate-600 font-medium">No recent transactions</p>
+                  <p className="text-sm text-slate-500">Start tracking your expenses</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {recentExpenses.map((exp, idx) => (
+                    <div key={exp.id} className="flex items-center justify-between p-4 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors border border-slate-200/50">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
+                          {idx + 1}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-sm text-slate-900">{exp.description}</p>
+                          <p className="text-xs text-slate-500">
+                            {new Date(exp.transaction_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-rose-600">{format(exp.amount)}</p>
+                        <p className="text-xs text-slate-500">{exp.payment_method}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   )
 }
