@@ -1,7 +1,8 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Request, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, status, Request, UploadFile, File, Body, Form
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
+from sqlalchemy.orm import joinedload
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import date, datetime
@@ -62,6 +63,11 @@ class ExpenseResponse(BaseModel):
     payment_method: Optional[str]
     category_id: Optional[str]
     created_at: datetime
+    
+    # category display fields
+    category_name: Optional[str] = None
+    category_color: Optional[str] = None
+    category_icon: Optional[str] = None
 
 class CategoryCreate(BaseModel):
     name: str
@@ -175,6 +181,14 @@ async def create_expense(
     await db.commit()
     await db.refresh(new_expense)
     
+    # Fetch category if exists
+    category = None
+    if new_expense.category_id:
+        result = await db.execute(
+            select(Category).where(Category.id == new_expense.category_id)
+        )
+        category = result.scalar_one_or_none()
+    
     return ExpenseResponse(
         id=str(new_expense.id),
         amount=float(new_expense.amount),
@@ -183,7 +197,10 @@ async def create_expense(
         transaction_date=new_expense.transaction_date,
         payment_method=new_expense.payment_method,
         category_id=str(new_expense.category_id) if new_expense.category_id else None,
-        created_at=new_expense.created_at
+        created_at=new_expense.created_at,
+        category_name=category.name if category else None,
+        category_color=category.color if category else None,
+        category_icon=category.icon if category else None,
     )
 
 @app.get("/expenses", response_model=List[ExpenseResponse])
@@ -198,6 +215,7 @@ async def get_expenses(
     
     result = await db.execute(
         select(Expense)
+        .options(joinedload(Expense.category))
         .where(Expense.user_id == uuid.UUID(user["user_id"]))
         .order_by(Expense.transaction_date.desc())
         .offset(skip)
@@ -214,10 +232,68 @@ async def get_expenses(
             transaction_date=exp.transaction_date,
             payment_method=exp.payment_method,
             category_id=str(exp.category_id) if exp.category_id else None,
-            created_at=exp.created_at
+            created_at=exp.created_at,
+            category_name=exp.category.name if exp.category else None,
+            category_color=exp.category.color if exp.category else None,
+            category_icon=exp.category.icon if exp.category else None,
         )
         for exp in expenses
     ]
+
+@app.put("/expenses/{expense_id}", response_model=ExpenseResponse)
+async def update_expenses(
+    expense_id: str,
+    payload: ExpenseCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    user = get_current_user(request)
+    await set_tenant_context(db, user["tenant_id"])
+
+    result = await db.execute(
+        select(Expense).where(and_(Expense.id == uuid.UUID(expense_id), Expense.user_id == uuid.UUID(user["user_id"])))
+    )
+    expense = result.scalar_one_or_none()
+    if not expense: 
+        raise HTTPException(status_code=404, detail="Expense not found")
+
+    expense.category_id = uuid.UUID(payload.category_id) if payload.category_id else None 
+    expense.amount = Decimal(str(payload.amount))
+    expense.currency = payload.currency 
+    expense.description = payload.description 
+    expense.transaction_date = payload.transaction_date 
+    expense.payment_method = payload.payment_method 
+    expense.tags = payload.tags 
+
+    exchange_rate = await get_exchange_rate(db, payload.currency, "USD", payload.transaction_date)
+    expense.exchange_rate = exchange_rate 
+    expense.amount_in_base_currency = Decimal(str(payload.amount)) * exchange_rate 
+
+    await db.commit()
+    await db.refresh(expense)
+    
+    # Fetch category if exists
+    category = None
+    if expense.category_id:
+        result = await db.execute(
+            select(Category).where(Category.id == expense.category_id)
+        )
+        category = result.scalar_one_or_none()
+
+    return ExpenseResponse(
+        id=str(expense.id),
+        amount=float(expense.amount),
+        currency=expense.currency,
+        description=expense.description,
+        transaction_date=expense.transaction_date,
+        payment_method=expense.payment_method,
+        category_id=str(expense.category_id) if expense.category_id else None,
+        created_at=expense.created_at,
+        category_name=category.name if category else None,
+        category_color=category.color if category else None,
+        category_icon=category.icon if category else None,
+    )
+
 
 @app.delete("/expenses/{expense_id}")
 async def delete_expense(
@@ -322,7 +398,7 @@ async def create_budget(
         period=budget.period,
         start_date=budget.start_date,
         end_date=budget.end_date,
-        alert_threshold=Decimal(str(budget.alert_threshold)),
+        alert_threshold=Decimal(str(budget.alert_threshold)) if budget.alert_threshold is not None else Decimal("80"),
         is_active=True
     )
     
@@ -379,16 +455,20 @@ async def get_budgets(
     
     budget_responses = []
     for budget in budgets:
+        # Build conditions list
+        conditions = [
+            Expense.user_id == uuid.UUID(user["user_id"]),
+            Expense.transaction_date >= budget.start_date,
+            Expense.transaction_date <= budget.end_date,
+        ]
+        
+        # Add category filter only if budget.category_id exists
+        if budget.category_id:
+            conditions.append(Expense.category_id == budget.category_id)
+        
         result = await db.execute(
             select(func.sum(Expense.amount_in_base_currency))
-            .where(
-                and_(
-                    Expense.user_id == uuid.UUID(user["user_id"]),
-                    Expense.transaction_date >= budget.start_date,
-                    Expense.transaction_date <= budget.end_date,
-                    Expense.category_id == budget.category_id if budget.category_id else True
-                )
-            )
+            .where(and_(*conditions))
         )
         spent = result.scalar() or Decimal("0")
         remaining = budget.amount - spent
@@ -479,7 +559,7 @@ def parse_bank_statement_csv(content: str, currency: str = "INR") -> List[dict]:
 async def import_bank_statement(
     request: Request,
     file: UploadFile = File(...),
-    currency: str = "INR",
+    currency: str = Form("INR"),
     db: AsyncSession = Depends(get_db)
 ):
     user = get_current_user(request)
