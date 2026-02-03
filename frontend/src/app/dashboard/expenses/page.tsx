@@ -267,16 +267,16 @@ export default function ExpensesPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20">
+        <div className="flex items-center justify-center py-12 px-6">
           <div className="text-center">
             <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
             <p className="text-slate-600">Loading expenses...</p>
           </div>
         </div>
       ) : expenses.length === 0 ? (
-        <div className="flex items-center justify-center py-20">
+        <div className="flex items-center justify-center py-12 px-6">
           <Card className="max-w-md border-none shadow-2xl">
-            <CardContent className="flex flex-col items-center justify-center py-12">
+            <CardContent className="flex flex-col items-center justify-center py-10">
               <div className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mb-6">
                 <Wallet className="h-10 w-10 text-white" />
               </div>
@@ -292,7 +292,7 @@ export default function ExpensesPage() {
           </Card>
         </div>
       ) : (
-        <div className="flex gap-6 p-6">
+        <div className="flex gap-4 p-4 md:gap-6 md:p-6">
           {/* Sliding Sidebar */}
           <div
             className={cn(
@@ -556,10 +556,10 @@ export default function ExpensesPage() {
         </div>
       )}
 
-      {/* Add Expense Modal - Slide from bottom */}
+      {/* Add Expense Modal - Centered */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-300">
-          <Card className="w-full max-w-2xl rounded-t-3xl border-none shadow-2xl animate-in slide-in-from-bottom duration-500">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-300 p-4">
+          <Card className="w-full max-w-2xl rounded-3xl border-none shadow-2xl animate-in zoom-in-95 duration-300">
             <CardHeader className="border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-purple-50">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
