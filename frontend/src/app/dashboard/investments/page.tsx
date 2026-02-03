@@ -11,12 +11,9 @@ import { useAuthStore } from '@/lib/store'
 import { toast } from 'sonner'
 import { useCurrency } from '@/hooks/useCurrency'
 import { investmentApi, Investment } from '@/lib/api'
-import dynamic from 'next/dynamic'
 import StockSearch from '@/components/stocks/StockSearch'
 import TimeframeSelector from '@/components/stocks/TimeframeSelector'
-
-// Dynamic import to avoid SSR issues with charts
-const StockChart = dynamic(() => import('@/components/stocks/StockChart'), { ssr: false })
+import StockChart from '@/components/stocks/StockChartWrapper'
 
 interface StockQuote {
   symbol: string

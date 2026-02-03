@@ -237,7 +237,7 @@ export default function SettingsPage() {
                     <div className="space-y-0.5">
                       <Label>Budget Alerts</Label>
                       <p className="text-sm text-muted-foreground">
-                        Get notified when you're close to budget limits
+                        Get notified when you&apos;re close to budget limits
                       </p>
                     </div>
                     <input type="checkbox" defaultChecked className="w-4 h-4" />

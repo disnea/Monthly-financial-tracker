@@ -401,8 +401,9 @@ async def create_category(
         name=new_category.name,
         type=new_category.type,
         color=new_category.color,
-        icon=new_category.icon
-    )
+        icon=new_category.icon,
+        is_system=new_category.is_system,
+)
 
 @app.get("/categories", response_model=List[CategoryResponse])
 async def get_categories(
@@ -786,3 +787,4 @@ async def import_bank_statement(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8002)
+# Cache test

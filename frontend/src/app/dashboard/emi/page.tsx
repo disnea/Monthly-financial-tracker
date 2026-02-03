@@ -12,7 +12,7 @@ import {
   ChevronRight, CreditCard, Building2, Percent, CalendarDays, Edit
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { emiApi, EMI } from '@/lib/api'
+import { emiApi, EMI, EMIPayment } from '@/lib/api'
 import { useCurrency } from '@/hooks/useCurrency'
 import { cn } from '@/lib/utils'
 import { Progress } from '@/components/ui/progress'
@@ -25,6 +25,8 @@ export default function EMIPage() {
   const [showCalculator, setShowCalculator] = useState(false)
   const [selectedEmi, setSelectedEmi] = useState<EMI | null>(null)
   const [editingEmi, setEditingEmi] = useState<EMI | null>(null)
+  const [schedule, setSchedule] = useState<EMIPayment[]>([])
+  const [loadingSchedule, setLoadingSchedule] = useState(false)
   const [formData, setFormData] = useState<EMI>({
     loan_type: '',
     lender_name: '',
@@ -51,51 +53,6 @@ export default function EMIPage() {
   }
 
   const calculatedEMI = calculateEMI(calcData.principal, calcData.rate, calcData.tenure)
-
-  const sampleEMIs: EMI[] = [
-    {
-      id: '1',
-      loan_type: 'Home Loan',
-      lender_name: 'HDFC Bank',
-      principal_amount: 5000000,
-      currency: 'INR',
-      interest_rate: 8.5,
-      tenure_months: 240,
-      monthly_emi: 43391,
-      total_amount: 10413840,
-      total_interest: 5413840,
-      start_date: '2023-01-15',
-      paid_months: 18
-    },
-    {
-      id: '2',
-      loan_type: 'Car Loan',
-      lender_name: 'ICICI Bank',
-      principal_amount: 800000,
-      currency: 'INR',
-      interest_rate: 9.25,
-      tenure_months: 60,
-      monthly_emi: 16584,
-      total_amount: 995040,
-      total_interest: 195040,
-      start_date: '2023-06-01',
-      paid_months: 12
-    },
-    {
-      id: '3',
-      loan_type: 'Personal Loan',
-      lender_name: 'SBI',
-      principal_amount: 300000,
-      currency: 'INR',
-      interest_rate: 10.5,
-      tenure_months: 36,
-      monthly_emi: 9747,
-      total_amount: 350892,
-      total_interest: 50892,
-      start_date: '2024-01-10',
-      paid_months: 2
-    }
-  ]
 
   useEffect(() => {
     fetchEMIs()
@@ -175,6 +132,34 @@ export default function EMIPage() {
       fetchEMIs()
     } catch (error: any) {
       toast.error('Failed to delete EMI loan')
+    }
+  }
+
+  const handleViewSchedule = async (emi: EMI) => {
+    if (!emi.id) return
+    setSelectedEmi(emi)
+    setLoadingSchedule(true)
+    try {
+      const scheduleData = await emiApi.getSchedule(emi.id)
+      setSchedule(scheduleData)
+    } catch (error: any) {
+      toast.error('Failed to fetch payment schedule')
+    } finally {
+      setLoadingSchedule(false)
+    }
+  }
+
+  const handleMarkPaymentPaid = async (payment: EMIPayment) => {
+    const today = new Date().toISOString().split('T')[0]
+    try {
+      await emiApi.markPaymentPaid(payment.id, today)
+      toast.success('Payment marked as paid!')
+      if (selectedEmi?.id) {
+        await handleViewSchedule(selectedEmi)
+        fetchEMIs()
+      }
+    } catch (error: any) {
+      toast.error('Failed to mark payment as paid')
     }
   }
 
@@ -290,8 +275,7 @@ export default function EMIPage() {
               const Icon = getLoanIcon(emi.loan_type)
               const progress = getProgressPercentage(emi)
               const remaining = getRemainingMonths(emi)
-              const paidAmount = (emi.paid_months || 0) * (emi.monthly_emi || 0)
-              const remainingAmount = (emi.total_amount || 0) - paidAmount
+              const remainingAmount = emi.remaining_amount ?? (emi.total_amount || 0)
 
               return (
                 <Card 
@@ -365,7 +349,7 @@ export default function EMIPage() {
                     {/* Actions */}
                     <div className="flex items-center justify-between pt-3 border-t border-slate-100">
                       <button
-                        onClick={() => setSelectedEmi(emi)}
+                        onClick={() => handleViewSchedule(emi)}
                         className="text-xs font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1"
                       >
                         View Schedule
@@ -530,6 +514,132 @@ export default function EMIPage() {
                   Add Loan
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Schedule Modal */}
+      {selectedEmi && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <Card className="w-full max-w-4xl rounded-3xl border-none shadow-2xl max-h-[90vh] overflow-y-auto">
+            <CardHeader className="border-b border-slate-200 bg-gradient-to-r from-blue-50 to-cyan-50 sticky top-0 z-10">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
+                    Payment Schedule
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    {selectedEmi.loan_type} - {selectedEmi.lender_name}
+                  </CardDescription>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => {
+                  setSelectedEmi(null)
+                  setSchedule([])
+                }} className="rounded-xl">
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+                <div className="bg-white rounded-lg p-3">
+                  <p className="text-xs text-slate-600">Total Amount</p>
+                  <p className="text-lg font-bold text-slate-900">{format(selectedEmi.total_amount || 0)}</p>
+                </div>
+                <div className="bg-white rounded-lg p-3">
+                  <p className="text-xs text-slate-600">Paid Months</p>
+                  <p className="text-lg font-bold text-emerald-600">{selectedEmi.paid_months || 0} / {selectedEmi.tenure_months}</p>
+                </div>
+                <div className="bg-white rounded-lg p-3">
+                  <p className="text-xs text-slate-600">Remaining</p>
+                  <p className="text-lg font-bold text-blue-600">{format(selectedEmi.remaining_amount || 0)}</p>
+                </div>
+                <div className="bg-white rounded-lg p-3">
+                  <p className="text-xs text-slate-600">Monthly EMI</p>
+                  <p className="text-lg font-bold text-slate-900">{format(selectedEmi.monthly_emi || 0)}</p>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6">
+              {loadingSchedule ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-center">
+                    <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-slate-600">Loading schedule...</p>
+                  </div>
+                </div>
+              ) : schedule.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-slate-500">No payment schedule available</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {schedule.map((payment) => (
+                    <div 
+                      key={payment.id}
+                      className={cn(
+                        "border rounded-xl p-4 transition-all",
+                        payment.status === 'paid' 
+                          ? "bg-emerald-50 border-emerald-200" 
+                          : "bg-white border-slate-200 hover:border-blue-300"
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <Badge variant={payment.status === 'paid' ? 'default' : 'outline'} className={cn(
+                              "rounded-full",
+                              payment.status === 'paid' ? "bg-emerald-600" : "bg-slate-100 text-slate-700"
+                            )}>
+                              Installment #{payment.installment_number}
+                            </Badge>
+                            {payment.status === 'paid' && (
+                              <div className="flex items-center gap-1 text-emerald-700">
+                                <CheckCircle2 className="h-4 w-4" />
+                                <span className="text-xs font-medium">Paid</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                            <div>
+                              <p className="text-xs text-slate-500">Due Date</p>
+                              <p className="font-semibold text-slate-900">
+                                {new Date(payment.due_date).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-slate-500">Amount</p>
+                              <p className="font-semibold text-slate-900">{format(payment.amount)}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-slate-500">Principal</p>
+                              <p className="font-semibold text-blue-600">{format(payment.principal_component)}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-slate-500">Interest</p>
+                              <p className="font-semibold text-rose-600">{format(payment.interest_component)}</p>
+                            </div>
+                          </div>
+                          {payment.paid_date && (
+                            <div className="mt-2 text-xs text-emerald-700">
+                              Paid on: {new Date(payment.paid_date).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </div>
+                          )}
+                        </div>
+                        {payment.status !== 'paid' && (
+                          <Button
+                            onClick={() => handleMarkPaymentPaid(payment)}
+                            size="sm"
+                            className="ml-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
+                          >
+                            <CheckCircle2 className="h-4 w-4 mr-2" />
+                            Mark Paid
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

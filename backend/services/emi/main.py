@@ -58,6 +58,8 @@ class EMIResponse(BaseModel):
     status: str
     total_interest: float
     total_amount: float
+    paid_months: int
+    remaining_amount: float
 
 class EMIPaymentResponse(BaseModel):
     id: str
@@ -184,7 +186,9 @@ async def create_emi(
         end_date=new_emi.end_date,
         status=new_emi.status,
         total_interest=float(total_interest),
-        total_amount=float(total_amount)
+        total_amount=float(total_amount),
+        paid_months=0,
+        remaining_amount=float(total_amount)
     )
 
 @app.get("/emis", response_model=List[EMIResponse])
@@ -205,6 +209,17 @@ async def get_emis(
         total_amount = emi.monthly_emi * emi.tenure_months
         total_interest = total_amount - emi.principal_amount
         
+        paid_result = await db.execute(
+            select(EMIPayment).where(
+                EMIPayment.emi_id == emi.id,
+                EMIPayment.status == "paid",
+            )
+        )
+        paid_payments = paid_result.scalars().all()
+        paid_months = len(paid_payments)
+        paid_amount = sum(float(p.amount) for p in paid_payments)
+        remaining_amount = float(total_amount - paid_amount)
+        
         response.append(EMIResponse(
             id=str(emi.id),
             loan_type=emi.loan_type,
@@ -218,7 +233,9 @@ async def get_emis(
             end_date=emi.end_date,
             status=emi.status,
             total_interest=float(total_interest),
-            total_amount=float(total_amount)
+            total_amount=float(total_amount),
+            paid_months=paid_months,
+            remaining_amount=remaining_amount
         ))
     
     return response
@@ -248,6 +265,17 @@ async def get_emi(
     total_amount = emi.monthly_emi * emi.tenure_months
     total_interest = total_amount - emi.principal_amount
     
+    paid_result = await db.execute(
+        select(EMIPayment).where(
+            EMIPayment.emi_id == emi.id,
+            EMIPayment.status == "paid",
+        )
+    )
+    paid_payments = paid_result.scalars().all()
+    paid_months = len(paid_payments)
+    paid_amount = sum(float(p.amount) for p in paid_payments)
+    remaining_amount = float(total_amount - paid_amount)
+    
     return EMIResponse(
         id=str(emi.id),
         loan_type=emi.loan_type,
@@ -261,7 +289,9 @@ async def get_emi(
         end_date=emi.end_date,
         status=emi.status,
         total_interest=float(total_interest),
-        total_amount=float(total_amount)
+        total_amount=float(total_amount),
+        paid_months=paid_months,
+        remaining_amount=remaining_amount
     )
 
 @app.put("/emis/{emi_id}")

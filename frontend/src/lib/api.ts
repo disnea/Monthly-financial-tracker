@@ -281,6 +281,19 @@ export interface EMI {
   total_interest?: number
   total_amount?: number
   paid_months?: number
+  remaining_amount?: number
+}
+
+export interface EMIPayment {
+  id: string
+  installment_number: number
+  due_date: string
+  paid_date?: string
+  amount: number
+  principal_component: number
+  interest_component: number
+  outstanding_balance: number
+  status: string
 }
 
 export const emiApi = {
@@ -302,6 +315,14 @@ export const emiApi = {
   },
   delete: async (id: string) => {
     const response = await emiApiClient.delete(`/emis/${id}`)
+    return response.data
+  },
+  getSchedule: async (emiId: string): Promise<EMIPayment[]> => {
+    const response = await emiApiClient.get(`/emis/${emiId}/schedule`)
+    return response.data
+  },
+  markPaymentPaid: async (paymentId: string, paidDate: string) => {
+    const response = await emiApiClient.put(`/payments/${paymentId}/mark-paid?paid_date=${paidDate}`)
     return response.data
   },
 }
