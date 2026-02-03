@@ -288,6 +288,7 @@ export interface EMI {
   monthly_emi?: number
   total_interest?: number
   total_amount?: number
+  paid_months?: number
 }
 
 export const emiApi = {
