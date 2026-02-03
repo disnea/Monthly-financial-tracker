@@ -92,6 +92,16 @@ class BudgetCreate(BaseModel):
     end_date: date
     alert_threshold: Optional[float] = 80
 
+class BudgetUpdate(BaseModel):
+    category_id: Optional[str] = None
+    name: Optional[str] = None
+    amount: Optional[float] = None
+    currency: Optional[str] = None
+    period: Optional[str] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    alert_threshold: Optional[float] = None
+
 class BudgetResponse(BaseModel):
     id: str
     name: str
@@ -488,6 +498,106 @@ async def get_budgets(
         ))
     
     return budget_responses
+
+@app.put("/budgets/{budget_id}", response_model=BudgetResponse)
+async def update_budget(
+    budget_id: str,
+    payload: BudgetUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    user = get_current_user(request)
+    await set_tenant_context(db, user["tenant_id"])
+
+    # Find existing budget for this user
+    result = await db.execute(
+        select(Budget).where(
+            and_(
+                Budget.id == uuid.UUID(budget_id),
+                Budget.user_id == uuid.UUID(user["user_id"]),
+            )
+        )
+    )
+    budget = result.scalar_one_or_none()
+    if not budget:
+        raise HTTPException(status_code=404, detail="Budget not found")
+
+    # Apply partial updates
+    if payload.category_id is not None:
+        budget.category_id = uuid.UUID(payload.category_id) if payload.category_id else None
+    if payload.name is not None:
+        budget.name = payload.name
+    if payload.amount is not None:
+        budget.amount = Decimal(str(payload.amount))
+    if payload.currency is not None:
+        budget.currency = payload.currency
+    if payload.period is not None:
+        budget.period = payload.period
+    if payload.start_date is not None:
+        budget.start_date = payload.start_date
+    if payload.end_date is not None:
+        budget.end_date = payload.end_date
+    if payload.alert_threshold is not None:
+        budget.alert_threshold = Decimal(str(payload.alert_threshold))
+
+    await db.commit()
+    await db.refresh(budget)
+
+    # Recompute spent/remaining/percentage with updated fields
+    conditions = [
+        Expense.user_id == uuid.UUID(user["user_id"]),
+        Expense.transaction_date >= budget.start_date,
+        Expense.transaction_date <= budget.end_date,
+    ]
+    if budget.category_id:
+        conditions.append(Expense.category_id == budget.category_id)
+
+    result = await db.execute(
+        select(func.sum(Expense.amount_in_base_currency)).where(and_(*conditions))
+    )
+    spent = result.scalar() or Decimal("0")
+
+    remaining = budget.amount - spent
+    percentage = (spent / budget.amount * 100) if budget.amount > 0 else 0
+
+    return BudgetResponse(
+        id=str(budget.id),
+        name=budget.name,
+        amount=float(budget.amount),
+        currency=budget.currency,
+        period=budget.period,
+        start_date=budget.start_date,
+        end_date=budget.end_date,
+        spent=float(spent),
+        remaining=float(remaining),
+        percentage_used=float(percentage),
+    )
+
+@app.delete("/budgets/{budget_id}")
+async def delete_budget(
+    budget_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    user = get_current_user(request)
+    await set_tenant_context(db, user["tenant_id"])
+
+    result = await db.execute(
+        select(Budget).where(
+            and_(
+                Budget.id == uuid.UUID(budget_id),
+                Budget.user_id == uuid.UUID(user["user_id"]),
+            )
+        )
+    )
+    budget = result.scalar_one_or_none()
+    if not budget:
+        raise HTTPException(status_code=404, detail="Budget not found")
+
+    await db.delete(budget)
+    await db.commit()
+
+    return {"message": "Budget deleted successfully"}
 
 def parse_bank_statement_csv(content: str, currency: str = "INR") -> List[dict]:
     """Parse bank statement CSV and extract transactions"""
