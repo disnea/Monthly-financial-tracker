@@ -349,15 +349,15 @@ export default function DashboardPage() {
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Spending Breakdown */}
             <Card className="border border-slate-200 shadow-xl rounded-3xl bg-white">
-              <CardHeader className="border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-purple-50">
+              <CardHeader className="border-b border-slate-200 bg-white">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md">
                       <PieChart className="h-5 w-5 text-white" />
                     </div>
                     <div>
-                      <CardTitle className="text-lg font-bold text-slate-900">Spending Breakdown</CardTitle>
-                      <CardDescription className="text-xs">By category this month</CardDescription>
+                      <CardTitle className="text-xl font-bold text-slate-900">Spending Breakdown</CardTitle>
+                      <CardDescription className="text-sm font-medium text-slate-700">By category this month</CardDescription>
                     </div>
                   </div>
                 </div>
@@ -419,7 +419,7 @@ export default function DashboardPage() {
 
             {/* Cash Flow Trend */}
             <Card className="border border-slate-200 shadow-xl rounded-3xl bg-white">
-              <CardHeader className="border-b border-slate-200 bg-gradient-to-r from-emerald-50 to-teal-50">
+              <CardHeader className="border-b border-slate-200 bg-white">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md">
@@ -486,7 +486,7 @@ export default function DashboardPage() {
 
           {/* Recent Activity */}
           <Card className="border border-slate-200 shadow-xl rounded-3xl bg-white">
-            <CardHeader className="border-b border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100">
+            <CardHeader className="border-b border-slate-200 bg-white">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center shadow-md">
