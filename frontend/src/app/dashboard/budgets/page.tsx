@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Plus, PieChart, TrendingUp, AlertTriangle, Target, Trash2 } from 'lucide-react'
+import { Plus, PieChart, TrendingUp, AlertTriangle, Target, Trash2, Edit } from 'lucide-react'
 import { toast } from 'sonner'
 import { budgetApi, Budget } from '@/lib/api'
 import { useCurrency } from '@/hooks/useCurrency'
@@ -23,6 +23,7 @@ export default function BudgetsPage() {
   const [budgets, setBudgets] = useState<BudgetWithStats[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [editingBudget, setEditingBudget] = useState<BudgetWithStats | null>(null)
   const [formData, setFormData] = useState<Budget>({
     name: '',
     amount: 0,
@@ -52,6 +53,20 @@ export default function BudgetsPage() {
     }
   }
 
+  const handleEdit = (budget: BudgetWithStats) => {
+    setEditingBudget(budget)
+    setFormData({
+      name: budget.name,
+      amount: budget.amount,
+      currency: budget.currency,
+      period: budget.period || 'monthly',
+      start_date: budget.start_date?.split('T')[0] || new Date().toISOString().split('T')[0],
+      end_date: budget.end_date?.split('T')[0] || new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0],
+      category_id: budget.category_id
+    })
+    setShowForm(true)
+  }
+
   const handleSubmit = async () => {
     if (!formData.name || !formData.amount) {
       toast.error('Please fill in all required fields')
@@ -59,21 +74,27 @@ export default function BudgetsPage() {
     }
 
     try {
-      await budgetApi.create(formData)
-      toast.success('Budget added successfully!')
+      if (editingBudget && editingBudget.id) {
+        await budgetApi.update(editingBudget.id, formData)
+        toast.success('Budget updated successfully!')
+      } else {
+        await budgetApi.create(formData)
+        toast.success('Budget added successfully!')
+      }
       setShowForm(false)
+      setEditingBudget(null)
       setFormData({
         name: '',
         amount: 0,
-        currency: 'USD',
+        currency: currency,
         period: 'monthly',
         start_date: new Date().toISOString().split('T')[0],
         end_date: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0]
       })
       fetchBudgets()
     } catch (error: any) {
-      console.error('Failed to create budget:', error)
-      toast.error(error.response?.data?.detail || 'Failed to add budget')
+      console.error('Failed to save budget:', error)
+      toast.error(error.response?.data?.detail || `Failed to ${editingBudget ? 'update' : 'add'} budget`)
     }
   }
 
@@ -225,15 +246,26 @@ export default function BudgetsPage() {
                   </div>
                 )}
 
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full text-rose-600 hover:text-rose-700 hover:bg-rose-50 mt-2 rounded-xl font-semibold"
-                  onClick={() => budget.id && handleDelete(budget.id)}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Budget
-                </Button>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-xl font-semibold"
+                    onClick={() => handleEdit(budget)}
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl font-semibold"
+                    onClick={() => budget.id && handleDelete(budget.id)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -244,9 +276,9 @@ export default function BudgetsPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <Card className="w-full max-w-md">
             <CardHeader>
-              <CardTitle>Add Budget</CardTitle>
+              <CardTitle>{editingBudget ? 'Edit Budget' : 'Add Budget'}</CardTitle>
               <CardDescription>
-                Create a new budget to track your spending
+                {editingBudget ? 'Update your budget details' : 'Create a new budget to track your spending'}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

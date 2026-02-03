@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Plus, TrendingUp, TrendingDown, DollarSign, Calendar, BarChart3, Trash2, RefreshCw, Activity, BarChart2, LineChart } from 'lucide-react'
+import { Plus, TrendingUp, TrendingDown, DollarSign, Calendar, BarChart3, Trash2, RefreshCw, Activity, BarChart2, LineChart, Edit } from 'lucide-react'
 import { useAuthStore } from '@/lib/store'
 import { toast } from 'sonner'
 import { useCurrency } from '@/hooks/useCurrency'
@@ -43,6 +43,7 @@ export default function InvestmentsPage() {
   const [investments, setInvestments] = useState<Investment[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null)
   
   // Stock monitor state
   const [selectedSymbol, setSelectedSymbol] = useState('AAPL')
@@ -279,6 +280,20 @@ export default function InvestmentsPage() {
     setSelectedName(name)
   }
 
+  const handleEdit = (investment: Investment) => {
+    setEditingInvestment(investment)
+    setFormData({
+      investment_type: investment.investment_type,
+      asset_name: investment.asset_name,
+      asset_symbol: investment.asset_symbol,
+      quantity: investment.quantity,
+      purchase_price: investment.purchase_price,
+      currency: investment.currency,
+      purchase_date: investment.purchase_date.split('T')[0]
+    })
+    setShowForm(true)
+  }
+
   const handleSubmit = async () => {
     if (!formData.asset_name || !formData.quantity || !formData.purchase_price) {
       toast.error('Please fill in all required fields')
@@ -286,9 +301,15 @@ export default function InvestmentsPage() {
     }
 
     try {
-      await investmentApi.create(formData)
-      toast.success('Investment added successfully!')
+      if (editingInvestment && editingInvestment.id) {
+        await investmentApi.update(editingInvestment.id, formData)
+        toast.success('Investment updated successfully!')
+      } else {
+        await investmentApi.create(formData)
+        toast.success('Investment added successfully!')
+      }
       setShowForm(false)
+      setEditingInvestment(null)
       setFormData({
         investment_type: 'Stocks',
         asset_name: '',
@@ -299,8 +320,8 @@ export default function InvestmentsPage() {
       })
       fetchInvestments()
     } catch (error: any) {
-      console.error('Failed to create investment:', error)
-      toast.error(error.response?.data?.detail || 'Failed to add investment')
+      console.error('Failed to save investment:', error)
+      toast.error(error.response?.data?.detail || `Failed to ${editingInvestment ? 'update' : 'add'} investment`)
     }
   }
 
@@ -566,15 +587,26 @@ export default function InvestmentsPage() {
                   </div>
                 )}
 
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full text-red-600 hover:text-red-700 hover:bg-red-50"
-                  onClick={() => investment.id && handleDelete(investment.id)}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Investment
-                </Button>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                    onClick={() => handleEdit(investment)}
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    onClick={() => investment.id && handleDelete(investment.id)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -585,9 +617,9 @@ export default function InvestmentsPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <Card className="w-full max-w-md">
             <CardHeader>
-              <CardTitle>Add Investment</CardTitle>
+              <CardTitle>{editingInvestment ? 'Edit Investment' : 'Add Investment'}</CardTitle>
               <CardDescription>
-                Add a new investment to your portfolio
+                {editingInvestment ? 'Update your investment details' : 'Add a new investment to your portfolio'}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
