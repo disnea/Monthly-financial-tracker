@@ -33,6 +33,7 @@ export default function EMIPage() {
     principal_amount: 0,
     currency: currency,
     interest_rate: 0,
+    interest_type: 'reducing',
     tenure_months: 0,
     start_date: new Date().toISOString().split('T')[0]
   })
@@ -41,18 +42,33 @@ export default function EMIPage() {
   const [calcData, setCalcData] = useState({
     principal: 5000000,
     rate: 8.5,
-    tenure: 240
+    tenure: 240,
+    interestType: 'reducing' as 'reducing' | 'flat'
   })
 
-  const calculateEMI = (principal: number, rate: number, tenure: number) => {
-    const monthlyRate = rate / 12 / 100
-    const emi = (principal * monthlyRate * Math.pow(1 + monthlyRate, tenure)) / (Math.pow(1 + monthlyRate, tenure) - 1)
-    const totalAmount = emi * tenure
-    const totalInterest = totalAmount - principal
-    return { emi, totalAmount, totalInterest }
+  const calculateEMI = (principal: number, rate: number, tenure: number, interestType: 'reducing' | 'flat' = 'reducing') => {
+    if (rate === 0) {
+      const emi = principal / tenure
+      return { emi, totalAmount: principal, totalInterest: 0 }
+    }
+
+    if (interestType === 'flat') {
+      // Flat interest: Interest on original principal for entire tenure
+      const totalInterest = principal * (rate / 100) * (tenure / 12)
+      const totalAmount = principal + totalInterest
+      const emi = totalAmount / tenure
+      return { emi, totalAmount, totalInterest }
+    } else {
+      // Reducing balance: Interest on outstanding principal
+      const monthlyRate = rate / 12 / 100
+      const emi = (principal * monthlyRate * Math.pow(1 + monthlyRate, tenure)) / (Math.pow(1 + monthlyRate, tenure) - 1)
+      const totalAmount = emi * tenure
+      const totalInterest = totalAmount - principal
+      return { emi, totalAmount, totalInterest }
+    }
   }
 
-  const calculatedEMI = calculateEMI(calcData.principal, calcData.rate, calcData.tenure)
+  const calculatedEMI = calculateEMI(calcData.principal, calcData.rate, calcData.tenure, calcData.interestType)
 
   useEffect(() => {
     fetchEMIs()
@@ -78,6 +94,7 @@ export default function EMIPage() {
       principal_amount: emi.principal_amount,
       currency: emi.currency,
       interest_rate: emi.interest_rate,
+      interest_type: emi.interest_type || 'reducing',
       tenure_months: emi.tenure_months,
       start_date: emi.start_date.split('T')[0]
     })
@@ -91,7 +108,7 @@ export default function EMIPage() {
     }
 
     try {
-      const calculated = calculateEMI(formData.principal_amount, formData.interest_rate, formData.tenure_months)
+      const calculated = calculateEMI(formData.principal_amount, formData.interest_rate, formData.tenure_months, formData.interest_type as 'reducing' | 'flat' || 'reducing')
       const dataToSubmit = {
         ...formData,
         monthly_emi: calculated.emi,
@@ -153,12 +170,27 @@ export default function EMIPage() {
     const today = new Date().toISOString().split('T')[0]
     try {
       await emiApi.markPaymentPaid(payment.id, today)
-      toast.success('Payment marked as paid!')
+      
+      // Refresh both schedule and EMI list
       if (selectedEmi?.id) {
-        await handleViewSchedule(selectedEmi)
-        fetchEMIs()
+        // Get fresh data first
+        const updatedEmi = await emiApi.get(selectedEmi.id)
+        console.log('Updated EMI data:', updatedEmi)
+        
+        // Update the modal header with fresh data
+        setSelectedEmi(updatedEmi)
+        
+        // Refresh the schedule in the modal
+        const scheduleData = await emiApi.getSchedule(selectedEmi.id)
+        setSchedule(scheduleData)
+        
+        // Refresh the EMI list to update cards
+        await fetchEMIs()
       }
+      
+      toast.success('Payment marked as paid!')
     } catch (error: any) {
+      console.error('Error marking payment as paid:', error)
       toast.error('Failed to mark payment as paid')
     }
   }
@@ -452,6 +484,22 @@ export default function EMIPage() {
                   />
                 </div>
                 <div className="space-y-2">
+                  <Label>Interest Type *</Label>
+                  <select 
+                    className="w-full p-2 border rounded-xl bg-white"
+                    value={formData.interest_type || 'reducing'}
+                    onChange={(e) => setFormData({...formData, interest_type: e.target.value})}
+                  >
+                    <option value="reducing">Reducing Balance</option>
+                    <option value="flat">Flat Rate</option>
+                  </select>
+                  <p className="text-xs text-slate-500">
+                    {formData.interest_type === 'flat' 
+                      ? 'Flat: Interest calculated on original principal' 
+                      : 'Reducing: Interest on outstanding balance (lower EMI)'}
+                  </p>
+                </div>
+                <div className="space-y-2">
                   <Label>Tenure (months) *</Label>
                   <Input 
                     type="number" 
@@ -475,24 +523,24 @@ export default function EMIPage() {
               {/* Preview Calculation */}
               {formData.principal_amount > 0 && formData.interest_rate > 0 && formData.tenure_months > 0 && (
                 <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-4 border border-blue-200">
-                  <p className="text-sm font-semibold text-slate-700 mb-3">Calculated EMI Details:</p>
+                  <p className="text-sm font-semibold text-slate-700 mb-3">Calculated EMI Details ({formData.interest_type === 'flat' ? 'Flat Rate' : 'Reducing Balance'}):</p>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <p className="text-xs text-slate-600">Monthly EMI</p>
                       <p className="text-lg font-bold text-blue-600">
-                        {format(calculateEMI(formData.principal_amount, formData.interest_rate, formData.tenure_months).emi)}
+                        {format(calculateEMI(formData.principal_amount, formData.interest_rate, formData.tenure_months, formData.interest_type as 'reducing' | 'flat').emi)}
                       </p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-600">Total Interest</p>
                       <p className="text-lg font-bold text-rose-600">
-                        {format(calculateEMI(formData.principal_amount, formData.interest_rate, formData.tenure_months).totalInterest)}
+                        {format(calculateEMI(formData.principal_amount, formData.interest_rate, formData.tenure_months, formData.interest_type as 'reducing' | 'flat').totalInterest)}
                       </p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-600">Total Amount</p>
                       <p className="text-lg font-bold text-blue-600">
-                        {format(calculateEMI(formData.principal_amount, formData.interest_rate, formData.tenure_months).totalAmount)}
+                        {format(calculateEMI(formData.principal_amount, formData.interest_rate, formData.tenure_months, formData.interest_type as 'reducing' | 'flat').totalAmount)}
                       </p>
                     </div>
                   </div>
@@ -708,6 +756,23 @@ export default function EMIPage() {
                   </div>
 
                   <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Interest Type</Label>
+                    <select 
+                      className="w-full p-3 border rounded-xl bg-white text-lg font-semibold"
+                      value={calcData.interestType}
+                      onChange={(e) => setCalcData({...calcData, interestType: e.target.value as 'reducing' | 'flat'})}
+                    >
+                      <option value="reducing">Reducing Balance</option>
+                      <option value="flat">Flat Rate</option>
+                    </select>
+                    <p className="text-xs text-slate-600">
+                      {calcData.interestType === 'flat' 
+                        ? '💡 Flat: Higher total interest, same amount each month' 
+                        : '💡 Reducing: Lower total interest, calculated on balance'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
                     <Label className="text-sm font-semibold">Loan Tenure (months)</Label>
                     <Input
                       type="number"
@@ -770,6 +835,7 @@ export default function EMIPage() {
                         ...formData,
                         principal_amount: calcData.principal,
                         interest_rate: calcData.rate,
+                        interest_type: calcData.interestType,
                         tenure_months: calcData.tenure
                       })
                       setShowCalculator(false)

@@ -138,6 +138,8 @@ services:
       MINIO_SECRET_KEY: minio_password
     ports:
       - "8003:8003"
+    volumes:
+      - ./backend:/app
     depends_on:
       postgres:
         condition: service_healthy

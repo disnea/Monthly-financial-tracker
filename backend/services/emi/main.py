@@ -72,13 +72,33 @@ class EMIPaymentResponse(BaseModel):
     outstanding_balance: float
     status: str
 
-def calculate_emi(principal: Decimal, annual_rate: Decimal, months: int) -> Decimal:
-    """Calculate monthly EMI using reducing balance method"""
+def calculate_emi(principal: Decimal, annual_rate: Decimal, months: int, interest_type: str = "reducing") -> Decimal:
+    """
+    Calculate monthly EMI
+    
+    Args:
+        principal: Loan principal amount
+        annual_rate: Annual interest rate (e.g., 8.5 for 8.5%)
+        months: Loan tenure in months
+        interest_type: "reducing" or "flat"
+    
+    Returns:
+        Monthly EMI amount
+    """
     if annual_rate == 0:
         return principal / months
     
-    monthly_rate = annual_rate / Decimal("1200")
-    emi = principal * monthly_rate * pow(1 + monthly_rate, months) / (pow(1 + monthly_rate, months) - 1)
+    if interest_type == "flat":
+        # Flat interest: Interest calculated on original principal for entire tenure
+        # Total Interest = Principal × Rate × Time
+        total_interest = principal * (annual_rate / Decimal("100")) * (Decimal(months) / Decimal("12"))
+        total_amount = principal + total_interest
+        emi = total_amount / months
+    else:
+        # Reducing balance: Interest calculated on outstanding principal
+        monthly_rate = annual_rate / Decimal("1200")
+        emi = principal * monthly_rate * pow(1 + monthly_rate, months) / (pow(1 + monthly_rate, months) - 1)
+    
     return emi.quantize(Decimal("0.01"))
 
 def generate_emi_schedule(
@@ -86,32 +106,71 @@ def generate_emi_schedule(
     annual_rate: Decimal,
     months: int,
     monthly_emi: Decimal,
-    start_date: date
+    start_date: date,
+    interest_type: str = "reducing"
 ) -> List[dict]:
-    """Generate complete EMI payment schedule"""
+    """
+    Generate complete EMI payment schedule
+    
+    Args:
+        principal: Loan principal amount
+        annual_rate: Annual interest rate
+        months: Loan tenure in months
+        monthly_emi: Calculated monthly EMI amount
+        start_date: Loan start date
+        interest_type: "reducing" or "flat"
+    
+    Returns:
+        List of payment schedule dictionaries
+    """
     schedule = []
     outstanding = principal
-    monthly_rate = annual_rate / Decimal("1200")
     
-    for month in range(1, months + 1):
-        interest = outstanding * monthly_rate
-        principal_component = monthly_emi - interest
-        outstanding -= principal_component
+    if interest_type == "flat":
+        # Flat interest: Same interest every month, calculated on original principal
+        total_interest = principal * (annual_rate / Decimal("100")) * (Decimal(months) / Decimal("12"))
+        monthly_interest = total_interest / months
+        monthly_principal = principal / months
         
-        if outstanding < 0:
-            outstanding = Decimal("0")
+        for month in range(1, months + 1):
+            outstanding -= monthly_principal
+            if outstanding < 0:
+                outstanding = Decimal("0")
+            
+            due_date = start_date + relativedelta(months=month)
+            
+            schedule.append({
+                "installment_number": month,
+                "due_date": due_date,
+                "amount": monthly_emi,
+                "principal_component": monthly_principal,
+                "interest_component": monthly_interest,
+                "outstanding_balance": outstanding,
+                "status": "pending"
+            })
+    else:
+        # Reducing balance: Interest calculated on outstanding principal
+        monthly_rate = annual_rate / Decimal("1200")
         
-        due_date = start_date + relativedelta(months=month-1)
-        
-        schedule.append({
-            "installment_number": month,
-            "due_date": due_date,
-            "amount": monthly_emi,
-            "principal_component": principal_component,
-            "interest_component": interest,
-            "outstanding_balance": outstanding,
-            "status": "pending"
-        })
+        for month in range(1, months + 1):
+            interest = outstanding * monthly_rate
+            principal_component = monthly_emi - interest
+            outstanding -= principal_component
+            
+            if outstanding < 0:
+                outstanding = Decimal("0")
+            
+            due_date = start_date + relativedelta(months=month)
+            
+            schedule.append({
+                "installment_number": month,
+                "due_date": due_date,
+                "amount": monthly_emi,
+                "principal_component": principal_component,
+                "interest_component": interest,
+                "outstanding_balance": outstanding,
+                "status": "pending"
+            })
     
     return schedule
 
@@ -130,8 +189,9 @@ async def create_emi(
     
     principal = Decimal(str(emi.principal_amount))
     annual_rate = Decimal(str(emi.interest_rate))
+    interest_type = emi.interest_type or "reducing"
     
-    monthly_emi = calculate_emi(principal, annual_rate, emi.tenure_months)
+    monthly_emi = calculate_emi(principal, annual_rate, emi.tenure_months, interest_type)
     end_date = emi.start_date + relativedelta(months=emi.tenure_months)
     
     new_emi = EMI(
@@ -156,7 +216,7 @@ async def create_emi(
     await db.flush()
     
     schedule = generate_emi_schedule(
-        principal, annual_rate, emi.tenure_months, monthly_emi, emi.start_date
+        principal, annual_rate, emi.tenure_months, monthly_emi, emi.start_date, interest_type
     )
     
     for payment_data in schedule:
@@ -218,7 +278,7 @@ async def get_emis(
         paid_payments = paid_result.scalars().all()
         paid_months = len(paid_payments)
         paid_amount = sum(float(p.amount) for p in paid_payments)
-        remaining_amount = float(total_amount - paid_amount)
+        remaining_amount = float(total_amount) - paid_amount
         
         response.append(EMIResponse(
             id=str(emi.id),
@@ -274,7 +334,7 @@ async def get_emi(
     paid_payments = paid_result.scalars().all()
     paid_months = len(paid_payments)
     paid_amount = sum(float(p.amount) for p in paid_payments)
-    remaining_amount = float(total_amount - paid_amount)
+    remaining_amount = float(total_amount) - paid_amount
     
     return EMIResponse(
         id=str(emi.id),
