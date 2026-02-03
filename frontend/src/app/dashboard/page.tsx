@@ -145,12 +145,10 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-8 min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/20 -m-8 p-8">
+    <div className="space-y-8">
       {/* Hero Section - Inspired by Mint/YNAB */}
-      <div className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-purple-500/5 to-pink-500/5 rounded-3xl"></div>
-        <Card className="border-none shadow-xl rounded-3xl bg-white/80 backdrop-blur-sm relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-indigo-500/10 to-purple-500/10 rounded-full blur-3xl"></div>
+      <Card className="border shadow-lg rounded-3xl bg-white relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-indigo-500/5 to-purple-500/5 rounded-full blur-3xl"></div>
           
           <CardContent className="p-8 relative z-10">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
@@ -172,7 +170,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Net Worth Display */}
-                <div className="bg-gradient-to-r from-slate-50 to-slate-100/50 rounded-2xl p-5 border border-slate-200/50">
+                <div className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-2xl p-5 border border-slate-200">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-indigo-600" />
@@ -202,7 +200,7 @@ export default function DashboardPage() {
 
               {/* Right: Quick Stats Grid */}
               <div className="grid grid-cols-2 gap-4 lg:w-[420px]">
-                <div className="bg-white rounded-xl p-4 border border-slate-200/50 shadow-sm">
+                <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
                       <TrendingUp className="h-4 w-4 text-emerald-600" />
@@ -213,7 +211,7 @@ export default function DashboardPage() {
                   <p className="text-xs text-slate-500 mt-1">This month</p>
                 </div>
 
-                <div className="bg-white rounded-xl p-4 border border-slate-200/50 shadow-sm">
+                <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
                       <CreditCard className="h-4 w-4 text-blue-600" />
@@ -224,7 +222,7 @@ export default function DashboardPage() {
                   <p className="text-xs text-slate-500 mt-1">{displayStats.emiCount} active loans</p>
                 </div>
 
-                <div className="bg-white rounded-xl p-4 border border-slate-200/50 shadow-sm">
+                <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
                       <Target className="h-4 w-4 text-amber-600" />
@@ -235,7 +233,7 @@ export default function DashboardPage() {
                   <p className="text-xs text-slate-500 mt-1">{format(displayStats.budgetUsed)} of {format(displayStats.budgetTotal)}</p>
                 </div>
 
-                <div className="bg-white rounded-xl p-4 border border-slate-200/50 shadow-sm">
+                <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
                       <Activity className="h-4 w-4 text-purple-600" />
@@ -275,7 +273,6 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
-      </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-12">
