@@ -2,20 +2,19 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies for building packages
 RUN apt-get update && apt-get install -y \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install dependencies first (cached layer)
+COPY workers/requirements.txt ./workers/
+RUN pip install --no-cache-dir -r workers/requirements.txt
 
-# Install celery
-RUN pip install --no-cache-dir celery redis httpx
-
-# Copy shared modules and workers
+# Copy shared modules (changes less frequently)
 COPY shared/ ./shared/
+
+# Copy worker code (changes most frequently)
 COPY workers/ ./workers/
 
 # Set Python path
