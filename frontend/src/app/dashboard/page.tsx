@@ -302,7 +302,7 @@ export default function DashboardPage() {
                 title: 'Monthly EMI',
                 value: format(displayStats.emiMonthly),
                 change: `${displayStats.emiCount} active loans`,
-                trend: 'neutral',
+                trend: 'down',
                 icon: CreditCard,
                 color: 'from-blue-500 to-cyan-600',
                 bgColor: 'from-blue-50 to-cyan-50'
@@ -429,8 +429,8 @@ export default function DashboardPage() {
                       <Activity className="h-5 w-5 text-white" />
                     </div>
                     <div>
-                      <CardTitle className="text-lg font-bold text-slate-900">Cash Flow</CardTitle>
-                      <CardDescription className="text-xs">Income vs expenses</CardDescription>
+                      <CardTitle className="text-xl font-bold text-slate-900">Monthly Trends</CardTitle>
+                      <CardDescription className="text-sm font-medium text-slate-600">Income vs expenses</CardDescription>
                     </div>
                   </div>
                 </div>
@@ -496,8 +496,8 @@ export default function DashboardPage() {
                     <Clock className="h-5 w-5 text-white" />
                   </div>
                   <div>
-                    <CardTitle className="text-lg font-bold text-slate-900">Recent Transactions</CardTitle>
-                    <CardDescription className="text-xs">Latest 5 expenses</CardDescription>
+                    <CardTitle className="text-xl font-bold text-slate-900">Recent Transactions</CardTitle>
+                    <CardDescription className="text-sm font-medium text-slate-600">Latest 5 expenses</CardDescription>
                   </div>
                 </div>
                 <Link href="/dashboard/expenses">
