@@ -177,13 +177,13 @@ export default function EMIPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-purple-50/20">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/20">
       {/* Enhanced Header */}
       <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-slate-200/50 shadow-sm">
         <div className="p-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
                 EMI Loans
               </h1>
               <p className="text-slate-600 text-sm mt-1">Manage loans and track your payment schedule</p>
@@ -193,14 +193,14 @@ export default function EMIPage() {
               <Button 
                 onClick={() => setShowCalculator(true)}
                 variant="outline"
-                className="rounded-xl border-violet-200 hover:bg-violet-50"
+                className="rounded-xl border-blue-200 hover:bg-blue-50"
               >
                 <Calculator className="h-4 w-4 mr-2" />
                 EMI Calculator
               </Button>
               <Button 
                 onClick={() => setShowForm(true)} 
-                className="rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 shadow-lg"
+                className="rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 shadow-lg"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Loan
@@ -210,9 +210,9 @@ export default function EMIPage() {
 
           {/* Quick Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-            <div className="bg-gradient-to-br from-violet-500/10 to-purple-500/10 border border-violet-200/50 rounded-xl p-4">
+            <div className="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-200/50 rounded-xl p-4">
               <p className="text-xs font-medium text-slate-600 mb-1">Total Principal</p>
-              <p className="text-2xl font-bold text-violet-600">{format(totalPrincipal)}</p>
+              <p className="text-2xl font-bold text-blue-600">{format(totalPrincipal)}</p>
             </div>
             <div className="bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-200/50 rounded-xl p-4">
               <p className="text-xs font-medium text-slate-600 mb-1">Monthly EMI</p>
@@ -235,7 +235,7 @@ export default function EMIPage() {
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
-              <div className="w-16 h-16 border-4 border-violet-200 border-t-violet-600 rounded-full animate-spin mx-auto mb-4"></div>
+              <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
               <p className="text-slate-600">Loading EMI loans...</p>
             </div>
           </div>
@@ -243,7 +243,7 @@ export default function EMIPage() {
           <div className="flex items-center justify-center py-12">
             <Card className="max-w-md border-none shadow-2xl">
               <CardContent className="flex flex-col items-center justify-center py-12">
-                <div className="w-20 h-20 bg-gradient-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center mb-6">
+                <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-full flex items-center justify-center mb-6">
                   <Calculator className="h-10 w-10 text-white" />
                 </div>
                 <h3 className="text-2xl font-bold mb-2">No EMI Loans Yet</h3>
@@ -255,7 +255,7 @@ export default function EMIPage() {
                     <Calculator className="h-4 w-4 mr-2" />
                     Calculate EMI
                   </Button>
-                  <Button onClick={() => setShowForm(true)} className="rounded-xl bg-gradient-to-r from-violet-600 to-purple-600">
+                  <Button onClick={() => setShowForm(true)} className="rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600">
                     <Plus className="h-4 w-4 mr-2" />
                     Add Loan
                   </Button>
@@ -278,7 +278,7 @@ export default function EMIPage() {
                   className="group border-none shadow-xl hover:shadow-2xl transition-all duration-300 bg-white rounded-3xl overflow-hidden hover:scale-[1.02]"
                 >
                   {/* Header with Icon */}
-                  <div className="bg-gradient-to-br from-violet-500 to-purple-600 p-6 text-white relative overflow-hidden">
+                  <div className="bg-gradient-to-br from-blue-500 to-cyan-600 p-6 text-white relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
                     <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full -ml-12 -mb-12"></div>
                     
@@ -301,7 +301,7 @@ export default function EMIPage() {
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-semibold text-slate-600">Payment Progress</span>
-                        <span className="text-xs font-bold text-violet-600">{progress.toFixed(1)}%</span>
+                        <span className="text-xs font-bold text-blue-600">{progress.toFixed(1)}%</span>
                       </div>
                       <Progress value={progress} className="h-2" />
                       <div className="flex items-center justify-between mt-2">
@@ -345,7 +345,7 @@ export default function EMIPage() {
                     <div className="flex items-center justify-between pt-3 border-t border-slate-100">
                       <button
                         onClick={() => setSelectedEmi(emi)}
-                        className="text-xs font-medium text-violet-600 hover:text-violet-700 flex items-center gap-1"
+                        className="text-xs font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1"
                       >
                         View Schedule
                         <ChevronRight className="h-3 w-3" />
@@ -456,12 +456,12 @@ export default function EMIPage() {
 
               {/* Preview Calculation */}
               {formData.principal_amount > 0 && formData.interest_rate > 0 && formData.tenure_months > 0 && (
-                <div className="bg-gradient-to-br from-violet-50 to-purple-50 rounded-xl p-4 border border-violet-200">
+                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-4 border border-blue-200">
                   <p className="text-sm font-semibold text-slate-700 mb-3">Calculated EMI Details:</p>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <p className="text-xs text-slate-600">Monthly EMI</p>
-                      <p className="text-lg font-bold text-violet-600">
+                      <p className="text-lg font-bold text-blue-600">
                         {format(calculateEMI(formData.principal_amount, formData.interest_rate, formData.tenure_months).emi)}
                       </p>
                     </div>
@@ -491,7 +491,7 @@ export default function EMIPage() {
                 </Button>
                 <Button 
                   onClick={handleSubmit}
-                  className="flex-1 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700"
+                  className="flex-1 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
                 >
                   Add Loan
                 </Button>
@@ -588,7 +588,7 @@ export default function EMIPage() {
 
                 {/* Results Section */}
                 <div className="space-y-4">
-                  <div className="bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl p-6 text-white">
+                  <div className="bg-gradient-to-br from-blue-500 to-cyan-600 rounded-2xl p-6 text-white">
                     <p className="text-sm opacity-90 mb-2">Monthly EMI</p>
                     <p className="text-4xl font-bold mb-4">{format(calculatedEMI.emi)}</p>
                     <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/20">
@@ -614,7 +614,7 @@ export default function EMIPage() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-slate-600">Interest %</span>
-                      <span className="text-lg font-bold text-violet-600">
+                      <span className="text-lg font-bold text-blue-600">
                         {((calculatedEMI.totalInterest / calcData.principal) * 100).toFixed(1)}%
                       </span>
                     </div>
@@ -631,7 +631,7 @@ export default function EMIPage() {
                       setShowCalculator(false)
                       setShowForm(true)
                     }}
-                    className="w-full rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700"
+                    className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
                   >
                     Use These Values
                   </Button>
