@@ -9,8 +9,10 @@ import { Badge } from '@/components/ui/badge'
 import { Plus, Calculator, Calendar, DollarSign, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { emiApi, EMI } from '@/lib/api'
+import { useCurrency } from '@/hooks/useCurrency'
 
 export default function EMIPage() {
+  const { currency, symbol, format } = useCurrency()
   const [emis, setEmis] = useState<EMI[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -18,7 +20,7 @@ export default function EMIPage() {
     loan_type: '',
     lender_name: '',
     principal_amount: 0,
-    currency: 'INR',
+    currency: currency,
     interest_rate: 0,
     tenure_months: 0,
     start_date: new Date().toISOString().split('T')[0]
@@ -169,7 +171,7 @@ export default function EMIPage() {
                   <div>
                     <Label className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Principal</Label>
                     <p className="font-bold text-slate-900 text-lg">
-                      ₹{emi.principal_amount.toLocaleString('en-IN')}
+                      {format(emi.principal_amount)}
                     </p>
                   </div>
                   <div>
@@ -179,7 +181,7 @@ export default function EMIPage() {
                   <div>
                     <Label className="text-xs text-muted-foreground">Monthly EMI</Label>
                     <p className="font-semibold text-green-600">
-                      ₹{emi.monthly_emi?.toLocaleString('en-IN')}
+                      {format(emi.monthly_emi || 0)}
                     </p>
                   </div>
                   <div>
@@ -192,13 +194,13 @@ export default function EMIPage() {
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Total Amount:</span>
                     <span className="font-semibold">
-                      ₹{emi.total_amount?.toLocaleString('en-IN')}
+                      {format(emi.total_amount || 0)}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Total Interest:</span>
                     <span className="font-semibold text-orange-600">
-                      ₹{emi.total_interest?.toLocaleString('en-IN')}
+                      {format(emi.total_interest || 0)}
                     </span>
                   </div>
                 </div>

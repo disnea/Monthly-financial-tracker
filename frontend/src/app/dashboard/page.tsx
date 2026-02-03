@@ -5,12 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { ArrowUpRight, ArrowDownRight, Wallet, TrendingUp, CreditCard, PieChart, DollarSign, Activity } from 'lucide-react'
 import { useAuthStore } from '@/lib/store'
-import { formatCurrency } from '@/lib/utils'
+import { useCurrency } from '@/hooks/useCurrency'
 import { expenseApi, emiApi, investmentApi, budgetApi } from '@/lib/api'
 import { toast } from 'sonner'
 import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Tooltip, Legend, LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar, Area, AreaChart, ScatterChart, Scatter, ZAxis } from 'recharts'
 
 export default function DashboardPage() {
+  const { currency, symbol, format } = useCurrency()
   const user = useAuthStore((state) => state.user)
   const token = useAuthStore((state) => state.token)
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated())
@@ -163,7 +164,7 @@ export default function DashboardPage() {
   const statCards = [
     {
       title: 'Total Expenses',
-      value: `₹${displayStats.totalExpenses.toLocaleString('en-IN')}`,
+      value: format(displayStats.totalExpenses),
       change: `${displayStats.expenseCount} transactions`,
       icon: Wallet,
       trend: 'down' as const,
@@ -173,7 +174,7 @@ export default function DashboardPage() {
     {
       title: 'Active EMIs',
       value: `${displayStats.emiCount} Loans`,
-      change: `₹${displayStats.emiMonthly.toLocaleString('en-IN')}/mo`,
+      change: `${format(displayStats.emiMonthly)}/mo`,
       icon: CreditCard,
       trend: 'neutral' as const,
       iconColor: 'text-violet-600',
@@ -181,7 +182,7 @@ export default function DashboardPage() {
     },
     {
       title: 'Investment Value',
-      value: `₹${displayStats.investmentValue.toLocaleString('en-IN')}`,
+      value: format(displayStats.investmentValue),
       change: `${displayStats.investmentReturn >= 0 ? '+' : ''}${displayStats.investmentReturn.toFixed(1)}%`,
       icon: TrendingUp,
       trend: displayStats.investmentReturn >= 0 ? 'up' as const : 'down' as const,
@@ -190,8 +191,8 @@ export default function DashboardPage() {
     },
     {
       title: 'Budget Status',
-      value: `₹${displayStats.budgetUsed.toLocaleString('en-IN')}`,
-      change: `of ₹${displayStats.budgetTotal.toLocaleString('en-IN')}`,
+      value: format(displayStats.budgetUsed),
+      change: `of ${format(displayStats.budgetTotal)}`,
       icon: DollarSign,
       trend: 'neutral' as const,
       iconColor: 'text-blue-600',
@@ -216,7 +217,7 @@ export default function DashboardPage() {
         <div className="bg-slate-900 text-white p-3 rounded-lg shadow-xl border border-slate-700">
           <p className="font-semibold text-sm mb-1">{payload[0].name}</p>
           <p className="text-xs text-slate-300">
-            ₹{payload[0].value.toLocaleString('en-IN')}
+            {format(payload[0].value)}
           </p>
           <p className="text-xs text-slate-400 mt-1">
             {((payload[0].value / expensePieData.reduce((sum, item) => sum + item.value, 0)) * 100).toFixed(1)}%
@@ -267,7 +268,7 @@ export default function DashboardPage() {
                 <div>
                   <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Total Balance</p>
                   <p className="text-2xl font-bold text-white">
-                    ₹{((displayStats.investmentValue - displayStats.totalExpenses) + displayStats.budgetTotal).toLocaleString('en-IN')}
+                    {format((displayStats.investmentValue - displayStats.totalExpenses) + displayStats.budgetTotal)}
                   </p>
                 </div>
               </div>
@@ -392,7 +393,7 @@ export default function DashboardPage() {
                                   {percentage}%
                                 </tspan>
                                 <tspan x={x} dy="1.2em" className="text-[10px] font-medium opacity-90">
-                                  ₹{(value / 1000).toFixed(1)}k
+                                  {symbol}{(value / 1000).toFixed(1)}k
                                 </tspan>
                               </text>
                             )
@@ -431,7 +432,7 @@ export default function DashboardPage() {
                                   </p>
                                   <div className="space-y-1.5">
                                     <p className="text-slate-700 font-semibold text-lg">
-                                      ₹{data.value.toLocaleString('en-IN')}
+                                      {format(data.value)}
                                     </p>
                                     <p className="text-slate-500 text-xs">
                                       {((data.value / expensePieData.reduce((sum, item) => sum + item.value, 0)) * 100).toFixed(1)}% of total
@@ -467,7 +468,7 @@ export default function DashboardPage() {
                         <div className="text-center">
                           <p className="text-xs text-slate-500 font-medium uppercase tracking-wide mb-1">Total Spending</p>
                           <p className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                            ₹{expensePieData.reduce((sum, item) => sum + item.value, 0).toLocaleString('en-IN')}
+                            {format(expensePieData.reduce((sum, item) => sum + item.value, 0))}
                           </p>
                         </div>
                         <div className="h-12 w-px bg-gradient-to-b from-transparent via-slate-300 to-transparent"></div>
@@ -538,7 +539,7 @@ export default function DashboardPage() {
                       style={{ fontSize: '13px', fontWeight: '600' }}
                       tick={{ fill: '#475569' }}
                       axisLine={{ stroke: '#94a3b8', strokeWidth: 2 }}
-                      tickFormatter={(value) => `₹${(value/1000)}k`}
+                      tickFormatter={(value) => `${symbol}${(value/1000)}k`}
                     />
                     <Tooltip 
                       content={({ active, payload }) => {
@@ -556,7 +557,7 @@ export default function DashboardPage() {
                                       <span className="text-xs font-medium text-slate-600 capitalize">{entry.name}</span>
                                     </div>
                                     <span className="text-sm font-bold text-slate-800">
-                                      ₹{entry.value.toLocaleString('en-IN')}
+                                      {format(entry.value)}
                                     </span>
                                   </div>
                                 ))}
