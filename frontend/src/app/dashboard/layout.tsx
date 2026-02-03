@@ -70,9 +70,9 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-slate-50">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto bg-background p-8">
+      <main className="flex-1 overflow-y-auto p-8">
         {children}
       </main>
     </div>
