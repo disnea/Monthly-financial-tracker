@@ -76,7 +76,9 @@ export default function InvestmentsPage() {
       currency: 'INR',
       purchase_date: '2023-06-15',
       current_price: 2680,
-      total_value: 134000
+      current_value: 134000,
+      unrealized_gain_loss: 11500,
+      gain_loss_percentage: 9.38
     },
     {
       id: '2',
@@ -87,7 +89,9 @@ export default function InvestmentsPage() {
       currency: 'INR',
       purchase_date: '2023-08-01',
       current_price: 720,
-      total_value: 144000
+      current_value: 144000,
+      unrealized_gain_loss: 14000,
+      gain_loss_percentage: 10.77
     },
     {
       id: '3',
@@ -99,7 +103,9 @@ export default function InvestmentsPage() {
       currency: 'INR',
       purchase_date: '2023-10-12',
       current_price: 3850,
-      total_value: 115500
+      current_value: 115500,
+      unrealized_gain_loss: 9900,
+      gain_loss_percentage: 9.38
     },
     {
       id: '4',
@@ -110,7 +116,9 @@ export default function InvestmentsPage() {
       currency: 'INR',
       purchase_date: '2024-01-05',
       current_price: 248,
-      total_value: 24800
+      current_value: 24800,
+      unrealized_gain_loss: 1300,
+      gain_loss_percentage: 5.53
     }
   ]
 
@@ -315,7 +323,7 @@ export default function InvestmentsPage() {
         asset_name: '',
         quantity: 0,
         purchase_price: 0,
-        currency: 'USD',
+        currency: currency,
         purchase_date: new Date().toISOString().split('T')[0]
       })
       fetchInvestments()
@@ -339,7 +347,7 @@ export default function InvestmentsPage() {
   }
 
   const totalInvested = investments.reduce((sum, inv) => sum + (inv.purchase_price * inv.quantity), 0)
-  const currentValue = investments.reduce((sum, inv) => sum + (inv.total_value || 0), 0)
+  const currentValue = investments.reduce((sum, inv) => sum + (inv.current_value ?? inv.purchase_price * inv.quantity), 0)
   const totalProfitLoss = currentValue - totalInvested
   const totalProfitLossPercentage = totalInvested > 0 ? (totalProfitLoss / totalInvested) * 100 : 0
 
@@ -532,8 +540,8 @@ export default function InvestmentsPage() {
                     <CardDescription className="text-slate-600 font-medium">{investment.asset_symbol}</CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className={`p-2 rounded-xl shadow-lg ${investment.profit_loss && investment.profit_loss >= 0 ? 'bg-gradient-to-br from-emerald-500 to-teal-600' : 'bg-gradient-to-br from-rose-500 to-pink-600'}`}>
-                      {investment.profit_loss && investment.profit_loss >= 0 ? (
+                    <div className={`p-2 rounded-xl shadow-lg ${investment.unrealized_gain_loss && investment.unrealized_gain_loss >= 0 ? 'bg-gradient-to-br from-emerald-500 to-teal-600' : 'bg-gradient-to-br from-rose-500 to-pink-600'}`}>
+                      {investment.unrealized_gain_loss && investment.unrealized_gain_loss >= 0 ? (
                         <TrendingUp className="h-4 w-4 text-white" />
                       ) : (
                         <TrendingDown className="h-4 w-4 text-white" />
@@ -551,26 +559,26 @@ export default function InvestmentsPage() {
                   </div>
                   <div>
                     <Label className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Purchase Price</Label>
-                    <p className="font-bold text-slate-900">₹{investment.purchase_price.toLocaleString('en-IN')}</p>
+                    <p className="font-bold text-slate-900">{format(investment.purchase_price)}</p>
                   </div>
                   <div>
                     <Label className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Current Price</Label>
-                    <p className="font-bold text-indigo-600">₹{investment.current_price?.toLocaleString('en-IN')}</p>
+                    <p className="font-bold text-indigo-600">{format(investment.current_price || 0)}</p>
                   </div>
                   <div>
                     <Label className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Total Value</Label>
-                    <p className="font-bold text-indigo-600">₹{investment.total_value?.toLocaleString('en-IN')}</p>
+                    <p className="font-bold text-indigo-600">{format(investment.current_value || 0)}</p>
                   </div>
                 </div>
                 
                 <div className="pt-3 border-t border-slate-200">
                   <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
                     <span className="text-sm font-semibold text-slate-700">P&L:</span>
-                    <div className={`font-bold text-lg ${investment.profit_loss && investment.profit_loss >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {investment.profit_loss && investment.profit_loss >= 0 ? '+' : ''}
-                      ₹{Math.abs(investment.profit_loss || 0).toLocaleString('en-IN')}
+                    <div className={`font-bold text-lg ${investment.unrealized_gain_loss && investment.unrealized_gain_loss >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {investment.unrealized_gain_loss && investment.unrealized_gain_loss >= 0 ? '+' : ''}
+                      {format(Math.abs(investment.unrealized_gain_loss || 0))}
                       <span className="text-sm ml-2">
-                        ({investment.profit_loss_percentage?.toFixed(2)}%)
+                        ({investment.gain_loss_percentage?.toFixed(2)}%)
                       </span>
                     </div>
                   </div>

@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import date, datetime
@@ -56,6 +56,9 @@ class InvestmentResponse(BaseModel):
     unrealized_gain_loss: Optional[float]
     gain_loss_percentage: Optional[float]
     notes: Optional[str]
+
+class PriceUpdate(BaseModel):
+    current_price: float
 
 class PortfolioSummary(BaseModel):
     total_investment: float
@@ -165,7 +168,10 @@ async def get_investment(
     
     result = await db.execute(
         select(Investment).where(
-            Investment.id == uuid.UUID(investment_id)
+            and_(
+                Investment.id == uuid.UUID(investment_id),
+                Investment.user_id == uuid.UUID(user["user_id"]),
+            )
         )
     )
     inv = result.scalar_one_or_none()
@@ -207,7 +213,12 @@ async def update_investment(
     await set_tenant_context(db, user["tenant_id"])
     
     result = await db.execute(
-        select(Investment).where(Investment.id == uuid.UUID(investment_id))
+        select(Investment).where(
+            and_(
+                Investment.id == uuid.UUID(investment_id),
+                Investment.user_id == uuid.UUID(user["user_id"]),
+            )
+        )
     )
     investment = result.scalar_one_or_none()
     
@@ -241,7 +252,12 @@ async def delete_investment(
     await set_tenant_context(db, user["tenant_id"])
     
     result = await db.execute(
-        select(Investment).where(Investment.id == uuid.UUID(investment_id))
+        select(Investment).where(
+            and_(
+                Investment.id == uuid.UUID(investment_id),
+                Investment.user_id == uuid.UUID(user["user_id"]),
+            )
+        )
     )
     investment = result.scalar_one_or_none()
     
@@ -290,7 +306,7 @@ async def get_portfolio_summary(
 @app.put("/investments/{investment_id}/price")
 async def update_investment_price(
     investment_id: str,
-    current_price: float,
+    payload: PriceUpdate,
     request: Request,
     db: AsyncSession = Depends(get_db)
 ):
@@ -298,14 +314,19 @@ async def update_investment_price(
     await set_tenant_context(db, user["tenant_id"])
     
     result = await db.execute(
-        select(Investment).where(Investment.id == uuid.UUID(investment_id))
+        select(Investment).where(
+            and_(
+                Investment.id == uuid.UUID(investment_id),
+                Investment.user_id == uuid.UUID(user["user_id"]),
+            )
+        )
     )
     investment = result.scalar_one_or_none()
     
     if not investment:
         raise HTTPException(status_code=404, detail="Investment not found")
     
-    investment.current_price = Decimal(str(current_price))
+    investment.current_price = Decimal(str(payload.current_price))
     investment.current_value = investment.quantity * investment.current_price
     investment.unrealized_gain_loss = investment.current_value - (investment.quantity * investment.purchase_price)
     investment.last_updated = datetime.utcnow()

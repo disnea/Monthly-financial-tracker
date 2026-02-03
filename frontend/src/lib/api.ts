@@ -315,12 +315,12 @@ export interface Investment {
   quantity: number
   purchase_price: number
   current_price?: number
+  current_value?: number           // renamed from total_value
+  unrealized_gain_loss?: number    // renamed from profit_loss
+  gain_loss_percentage?: number    // renamed from profit_loss_percentage
   currency: string
   purchase_date: string
   notes?: string
-  total_value?: number
-  profit_loss?: number
-  profit_loss_percentage?: number
 }
 
 export const investmentApi = {
