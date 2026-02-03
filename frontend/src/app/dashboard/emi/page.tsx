@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { 
   Plus, Calculator, Calendar, DollarSign, Trash2, TrendingDown, 
   TrendingUp, Clock, CheckCircle2, AlertCircle, X, PieChart,
-  ChevronRight, CreditCard, Building2, Percent, CalendarDays
+  ChevronRight, CreditCard, Building2, Percent, CalendarDays, Edit
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { emiApi, EMI } from '@/lib/api'
@@ -24,6 +24,7 @@ export default function EMIPage() {
   const [showForm, setShowForm] = useState(false)
   const [showCalculator, setShowCalculator] = useState(false)
   const [selectedEmi, setSelectedEmi] = useState<EMI | null>(null)
+  const [editingEmi, setEditingEmi] = useState<EMI | null>(null)
   const [formData, setFormData] = useState<EMI>({
     loan_type: '',
     lender_name: '',
@@ -112,6 +113,20 @@ export default function EMIPage() {
     }
   }
 
+  const handleEdit = (emi: EMI) => {
+    setEditingEmi(emi)
+    setFormData({
+      loan_type: emi.loan_type,
+      lender_name: emi.lender_name,
+      principal_amount: emi.principal_amount,
+      currency: emi.currency,
+      interest_rate: emi.interest_rate,
+      tenure_months: emi.tenure_months,
+      start_date: emi.start_date.split('T')[0]
+    })
+    setShowForm(true)
+  }
+
   const handleSubmit = async () => {
     if (!formData.loan_type || !formData.lender_name || !formData.principal_amount || !formData.interest_rate || !formData.tenure_months) {
       toast.error('Please fill in all required fields')
@@ -127,9 +142,15 @@ export default function EMIPage() {
         total_interest: calculated.totalInterest
       }
       
-      await emiApi.create(dataToSubmit)
-      toast.success('EMI loan added successfully!')
+      if (editingEmi && editingEmi.id) {
+        await emiApi.update(editingEmi.id, dataToSubmit)
+        toast.success('EMI loan updated successfully!')
+      } else {
+        await emiApi.create(dataToSubmit)
+        toast.success('EMI loan added successfully!')
+      }
       setShowForm(false)
+      setEditingEmi(null)
       setFormData({
         loan_type: '',
         lender_name: '',
@@ -141,7 +162,7 @@ export default function EMIPage() {
       })
       fetchEMIs()
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Failed to add EMI loan')
+      toast.error(error.response?.data?.detail || `Failed to ${editingEmi ? 'update' : 'add'} EMI loan`)
     }
   }
 
@@ -350,14 +371,24 @@ export default function EMIPage() {
                         View Schedule
                         <ChevronRight className="h-3 w-3" />
                       </button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg"
-                        onClick={() => emi.id && handleDelete(emi.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg"
+                          onClick={() => handleEdit(emi)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg"
+                          onClick={() => emi.id && handleDelete(emi.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
 
                     {/* Start Date */}
@@ -377,17 +408,20 @@ export default function EMIPage() {
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <Card className="w-full max-w-2xl rounded-3xl border-none shadow-2xl max-h-[90vh] overflow-y-auto">
-            <CardHeader className="border-b border-slate-200 bg-gradient-to-r from-violet-50 to-purple-50">
+            <CardHeader className="border-b border-slate-200 bg-gradient-to-r from-blue-50 to-cyan-50">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-2xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
-                    Add EMI Loan
+                  <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
+                    {editingEmi ? 'Edit EMI Loan' : 'Add EMI Loan'}
                   </CardTitle>
                   <CardDescription className="mt-1">
-                    Enter your loan details to calculate and track EMI
+                    {editingEmi ? 'Update your loan details' : 'Enter your loan details to calculate and track EMI'}
                   </CardDescription>
                 </div>
-                <Button variant="ghost" size="icon" onClick={() => setShowForm(false)} className="rounded-xl">
+                <Button variant="ghost" size="icon" onClick={() => {
+                  setShowForm(false)
+                  setEditingEmi(null)
+                }} className="rounded-xl">
                   <X className="h-5 w-5" />
                 </Button>
               </div>

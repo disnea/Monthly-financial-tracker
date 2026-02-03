@@ -54,6 +54,7 @@ export default function ExpensesPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [editingExpense, setEditingExpense] = useState<ExpenseWithCategory | null>(null)
   const [formData, setFormData] = useState({
     amount: 0,
     currency: currency,
@@ -105,6 +106,19 @@ export default function ExpensesPage() {
     }
   }
 
+  const handleEdit = (expense: ExpenseWithCategory) => {
+    setEditingExpense(expense)
+    setFormData({
+      amount: expense.amount,
+      currency: expense.currency,
+      description: expense.description || '',
+      transaction_date: expense.transaction_date.split('T')[0],
+      payment_method: expense.payment_method || 'UPI',
+      category_id: expense.category_id || ''
+    })
+    setShowForm(true)
+  }
+
   const handleSubmit = async () => {
     if (!formData.amount || !formData.description) {
       toast.error('Please fill in all required fields')
@@ -112,9 +126,15 @@ export default function ExpensesPage() {
     }
 
     try {
-      await expenseApi.create(formData)
-      toast.success('Expense added successfully!')
+      if (editingExpense && editingExpense.id) {
+        await expenseApi.update(editingExpense.id, formData)
+        toast.success('Expense updated successfully!')
+      } else {
+        await expenseApi.create(formData)
+        toast.success('Expense added successfully!')
+      }
       setShowForm(false)
+      setEditingExpense(null)
       setFormData({
         amount: 0,
         currency: currency,
@@ -125,7 +145,7 @@ export default function ExpensesPage() {
       })
       fetchExpenses()
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Failed to add expense')
+      toast.error(error.response?.data?.detail || `Failed to ${editingExpense ? 'update' : 'add'} expense`)
     }
   }
 
@@ -537,6 +557,14 @@ export default function ExpensesPage() {
                                   <Button
                                     variant="ghost"
                                     size="sm"
+                                    onClick={() => handleEdit(expense)}
+                                    className="rounded-xl hover:bg-indigo-50 hover:text-indigo-600"
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
                                     onClick={() => handleDelete(expense.id!)}
                                     className="rounded-xl hover:bg-rose-50 hover:text-rose-600"
                                   >
@@ -563,9 +591,12 @@ export default function ExpensesPage() {
             <CardHeader className="border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-purple-50">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                  Add New Expense
+                  {editingExpense ? 'Edit Expense' : 'Add New Expense'}
                 </CardTitle>
-                <Button variant="ghost" size="sm" onClick={() => setShowForm(false)} className="rounded-xl">
+                <Button variant="ghost" size="sm" onClick={() => {
+                  setShowForm(false)
+                  setEditingExpense(null)
+                }} className="rounded-xl">
                   <X className="h-5 w-5" />
                 </Button>
               </div>
