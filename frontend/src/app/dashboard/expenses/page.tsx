@@ -12,23 +12,21 @@ import {
   Utensils, Car, Home, Heart, Film, ChevronDown, X, Eye
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { expenseApi, Expense, financeApiClient } from '@/lib/api'
+import { expenseApi, Expense, Category, categoryApi, financeApiClient } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { useCurrency } from '@/hooks/useCurrency'
 import { cn } from '@/lib/utils'
 
-interface ExpenseWithCategory extends Expense {
-  category_name?: string
-}
-
-const categoryIcons: Record<string, any> = {
-  'Food & Dining': Utensils,
-  'Transportation': Car,
-  'Shopping': ShoppingBag,
-  'Utilities': Home,
-  'Healthcare': Heart,
-  'Entertainment': Film,
-  'default': Receipt
+// Icon mapping from backend icon string → Lucide component
+const iconMap: Record<string, any> = {
+  wallet: Wallet,
+  shopping: ShoppingBag,
+  food: Utensils,
+  transport: Car,
+  utilities: Home,
+  healthcare: Heart,
+  entertainment: Film,
+  default: Receipt,
 }
 
 const categoryColors: Record<string, string> = {
@@ -45,7 +43,7 @@ export default function ExpensesPage() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated())
   const token = useAuthStore((state) => state.token)
   const { currency, symbol, format } = useCurrency()
-  const [expenses, setExpenses] = useState<ExpenseWithCategory[]>([])
+  const [expenses, setExpenses] = useState<Expense[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [importingStatement, setImportingStatement] = useState(false)
@@ -53,8 +51,9 @@ export default function ExpensesPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [categoriesMaster, setCategoriesMaster] = useState<Category[]>([])
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [editingExpense, setEditingExpense] = useState<ExpenseWithCategory | null>(null)
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null)
   const [formData, setFormData] = useState({
     amount: 0,
     currency: currency,
@@ -65,15 +64,15 @@ export default function ExpensesPage() {
   })
 
   // Sample expenses
-  const sampleExpenses: ExpenseWithCategory[] = [
-    { id: '1', amount: 3250, currency: 'INR', description: 'Grocery Shopping at BigBasket', transaction_date: '2024-01-15', payment_method: 'Credit Card', category_name: 'Food & Dining' },
-    { id: '2', amount: 285, currency: 'INR', description: 'Uber Ride to Office', transaction_date: '2024-01-14', payment_method: 'UPI', category_name: 'Transportation' },
-    { id: '3', amount: 850, currency: 'INR', description: 'Swiggy Food Order - Dinner', transaction_date: '2024-01-14', payment_method: 'Credit Card', category_name: 'Food & Dining' },
-    { id: '4', amount: 2100, currency: 'INR', description: 'Electricity Bill Payment', transaction_date: '2024-01-13', payment_method: 'Net Banking', category_name: 'Utilities' },
-    { id: '5', amount: 4500, currency: 'INR', description: 'Amazon Shopping - Electronics', transaction_date: '2024-01-12', payment_method: 'Credit Card', category_name: 'Shopping' },
-    { id: '6', amount: 1200, currency: 'INR', description: 'Mobile Recharge - Airtel', transaction_date: '2024-01-11', payment_method: 'UPI', category_name: 'Utilities' },
-    { id: '7', amount: 2800, currency: 'INR', description: 'Movie Tickets - PVR', transaction_date: '2024-01-10', payment_method: 'Credit Card', category_name: 'Entertainment' },
-    { id: '8', amount: 1500, currency: 'INR', description: 'Medicine Purchase', transaction_date: '2024-01-09', payment_method: 'Cash', category_name: 'Healthcare' },
+  const sampleExpenses: Expense[] = [
+    { id: '1', amount: 3250, currency: 'INR', description: 'Grocery Shopping at BigBasket', transaction_date: '2024-01-15', payment_method: 'Credit Card', category_id: null, created_at: '2024-01-15T10:00:00Z', category_name: 'Food & Dining', category_color: '#f97316', category_icon: 'utensils' },
+    { id: '2', amount: 285, currency: 'INR', description: 'Uber Ride to Office', transaction_date: '2024-01-14', payment_method: 'UPI', category_id: null, created_at: '2024-01-14T09:00:00Z', category_name: 'Transportation', category_color: '#3b82f6', category_icon: 'car' },
+    { id: '3', amount: 850, currency: 'INR', description: 'Swiggy Food Order - Dinner', transaction_date: '2024-01-14', payment_method: 'Credit Card', category_id: null, created_at: '2024-01-14T20:00:00Z', category_name: 'Food & Dining', category_color: '#f97316', category_icon: 'utensils' },
+    { id: '4', amount: 2100, currency: 'INR', description: 'Electricity Bill Payment', transaction_date: '2024-01-13', payment_method: 'Net Banking', category_id: null, created_at: '2024-01-13T15:00:00Z', category_name: 'Utilities', category_color: '#10b981', category_icon: 'home' },
+    { id: '5', amount: 4500, currency: 'INR', description: 'Amazon Shopping - Electronics', transaction_date: '2024-01-12', payment_method: 'Credit Card', category_id: null, created_at: '2024-01-12T14:00:00Z', category_name: 'Shopping', category_color: '#a855f7', category_icon: 'shopping-bag' },
+    { id: '6', amount: 1200, currency: 'INR', description: 'Mobile Recharge - Airtel', transaction_date: '2024-01-11', payment_method: 'UPI', category_id: null, created_at: '2024-01-11T11:00:00Z', category_name: 'Utilities', category_color: '#10b981', category_icon: 'home' },
+    { id: '7', amount: 2800, currency: 'INR', description: 'Movie Tickets - PVR', transaction_date: '2024-01-10', payment_method: 'Credit Card', category_id: null, created_at: '2024-01-10T19:00:00Z', category_name: 'Entertainment', category_color: '#ec4899', category_icon: 'film' },
+    { id: '8', amount: 1500, currency: 'INR', description: 'Medicine Purchase', transaction_date: '2024-01-09', payment_method: 'Cash', category_id: null, created_at: '2024-01-09T16:00:00Z', category_name: 'Healthcare', category_color: '#ef4444', category_icon: 'heart' },
   ]
 
   useEffect(() => {
@@ -83,6 +82,19 @@ export default function ExpensesPage() {
       setExpenses([])
       setLoading(false)
     }
+  }, [isAuthenticated, token])
+
+  useEffect(() => {
+    if (!isAuthenticated || !token) return
+    const load = async () => {
+      try {
+        const cats = await categoryApi.list()
+        setCategoriesMaster(cats)
+      } catch (e) {
+        console.error('Failed to load categories', e)
+      }
+    }
+    load()
   }, [isAuthenticated, token])
 
   const fetchExpenses = async () => {
@@ -106,13 +118,13 @@ export default function ExpensesPage() {
     }
   }
 
-  const handleEdit = (expense: ExpenseWithCategory) => {
+  const handleEdit = (expense: Expense) => {
     setEditingExpense(expense)
     setFormData({
       amount: expense.amount,
       currency: expense.currency,
       description: expense.description || '',
-      transaction_date: expense.transaction_date.split('T')[0],
+      transaction_date: expense.transaction_date, // it's already "YYYY-MM-DD"
       payment_method: expense.payment_method || 'UPI',
       category_id: expense.category_id || ''
     })
@@ -193,7 +205,7 @@ export default function ExpensesPage() {
   // Filter expenses
   const filteredExpenses = expenses.filter(expense => {
     const matchesSearch = expense.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? true
-    const matchesCategory = !selectedCategory || expense.category_name === selectedCategory
+    const matchesCategory = !selectedCategory || expense.category_id === selectedCategory
     const matchesDate = !selectedDate || expense.transaction_date.split('T')[0] === selectedDate
     return matchesSearch && matchesCategory && matchesDate
   })
@@ -204,7 +216,7 @@ export default function ExpensesPage() {
     if (!acc[date]) acc[date] = []
     acc[date].push(expense)
     return acc
-  }, {} as Record<string, ExpenseWithCategory[]>)
+  }, {} as Record<string, Expense[]>)
 
   const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0)
   const displayedTotal = filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0)
@@ -373,18 +385,18 @@ export default function ExpensesPage() {
                       >
                         All
                       </Badge>
-                      {categories.map(category => (
+                      {categoriesMaster.map(cat => (
                         <Badge
-                          key={category}
-                          onClick={() => setSelectedCategory(category || null)}
+                          key={cat.id}
+                          onClick={() => setSelectedCategory(cat.id)}
                           className={cn(
                             "cursor-pointer rounded-xl px-3 py-1.5 transition-all",
-                            selectedCategory === category
+                            selectedCategory === cat.id
                               ? "bg-indigo-600 text-white hover:bg-indigo-700"
                               : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                           )}
                         >
-                          {category}
+                          {cat.name}
                         </Badge>
                       ))}
                     </div>
@@ -518,8 +530,7 @@ export default function ExpensesPage() {
                     {/* Expense Cards */}
                     <div className="space-y-3">
                       {dayExpenses.map((expense) => {
-                        const Icon = categoryIcons[expense.category_name || 'default'] || categoryIcons.default
-                        const colorClass = categoryColors[expense.category_name || 'default'] || categoryColors.default
+                        const Icon = iconMap[expense.category_icon || 'default'] || iconMap.default
 
                         return (
                           <Card
@@ -529,7 +540,10 @@ export default function ExpensesPage() {
                             <CardContent className="p-0">
                               <div className="flex items-center gap-4 p-5">
                                 {/* Category Icon */}
-                                <div className={cn("flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center shadow-lg", colorClass)}>
+                                <div
+                                  className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center shadow-lg"
+                                  style={{ backgroundColor: expense.category_color || '#64748b' }}
+                                >
                                   <Icon className="h-6 w-6 text-white" />
                                 </div>
 
@@ -638,6 +652,24 @@ export default function ExpensesPage() {
               </div>
 
               <div className="space-y-2">
+                <Label>Category</Label>
+                <select
+                  value={formData.category_id}
+                  onChange={(e) =>
+                    setFormData({ ...formData, category_id: e.target.value || '' })
+                  }
+                  className="w-full p-2 border rounded-xl"
+                >
+                  <option value="">Uncategorized</option>
+                  {categoriesMaster.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
                 <Label>Payment Method</Label>
                 <select
                   value={formData.payment_method}
@@ -664,7 +696,7 @@ export default function ExpensesPage() {
                   onClick={handleSubmit}
                   className="flex-1 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
                 >
-                  Add Expense
+                  {editingExpense ? 'Save Changes' : 'Add Expense'}
                 </Button>
               </div>
             </CardContent>

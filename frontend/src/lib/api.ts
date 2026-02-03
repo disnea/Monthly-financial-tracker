@@ -178,66 +178,57 @@ export const authApi = {
 }
 
 export interface Expense {
-  id?: string
+  id: string
+  amount: number
+  currency: string
+  description?: string | null
+  transaction_date: string        // "YYYY-MM-DD"
+  payment_method?: string | null
+  category_id?: string | null
+  created_at: string
+
+  // new:
+  category_name?: string | null
+  category_color?: string | null
+  category_icon?: string | null
+}
+
+export interface ExpenseCreatePayload {
+  category_id?: string | null
   amount: number
   currency: string
   description?: string
-  transaction_date: string
+  transaction_date: string       // "YYYY-MM-DD"
   payment_method?: string
-  category_id?: string
+  tags?: string[]
 }
 
 export const expenseApi = {
-  create: async (data: Expense) => {
-    const response = await financeApiClient.post('/expenses', data)
-    return response.data
+  list(): Promise<Expense[]> {
+    return financeApiClient.get('/expenses').then(r => r.data)
   },
-  list: async () => {
-    const response = await financeApiClient.get('/expenses')
-    return response.data
+  create(data: ExpenseCreatePayload): Promise<Expense> {
+    return financeApiClient.post('/expenses', data).then(r => r.data)
   },
-  get: async (id: string) => {
-    const response = await financeApiClient.get(`/expenses/${id}`)
-    return response.data
+  update(id: string, data: ExpenseCreatePayload): Promise<Expense> {
+    return financeApiClient.put(`/expenses/${id}`, data).then(r => r.data)
   },
-  update: async (id: string, data: Partial<Expense>) => {
-    const response = await financeApiClient.put(`/expenses/${id}`, data)
-    return response.data
-  },
-  delete: async (id: string) => {
-    const response = await financeApiClient.delete(`/expenses/${id}`)
-    return response.data
+  delete(id: string): Promise<void> {
+    return financeApiClient.delete(`/expenses/${id}`).then(() => {})
   },
 }
 
 export interface Category {
-  id?: string
+  id: string
   name: string
-  type: string
-  color?: string
-  icon?: string
+  type: string          // e.g. 'expense'
+  color: string
+  icon: string
 }
 
 export const categoryApi = {
-  create: async (data: Category) => {
-    const response = await financeApiClient.post('/categories', data)
-    return response.data
-  },
-  list: async () => {
-    const response = await financeApiClient.get('/categories')
-    return response.data
-  },
-  get: async (id: string) => {
-    const response = await financeApiClient.get(`/categories/${id}`)
-    return response.data
-  },
-  update: async (id: string, data: Partial<Category>) => {
-    const response = await financeApiClient.put(`/categories/${id}`, data)
-    return response.data
-  },
-  delete: async (id: string) => {
-    const response = await financeApiClient.delete(`/categories/${id}`)
-    return response.data
+  list(): Promise<Category[]> {
+    return financeApiClient.get('/categories').then(r => r.data)
   },
 }
 
