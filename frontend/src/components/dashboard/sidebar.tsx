@@ -250,41 +250,47 @@ export function Sidebar() {
     >
       {/* Header - Fixed alignment */}
       <div className={cn(
-        "flex items-center border-b border-slate-700/50 p-4 min-h-[72px]",
-        collapsed ? "justify-center" : "justify-between"
+        "flex items-center justify-between border-b border-slate-700/50 p-4 min-h-[72px] gap-3"
       )}>
-        {!collapsed && (
-          <div className="flex items-center gap-3 flex-1 min-w-0">
+        {!collapsed ? (
+          <>
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg flex items-center justify-center">
+                <Wallet className="h-5 w-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h1 className="font-bold text-base bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent truncate">
+                  FinanceTracker
+                </h1>
+                <p className="text-xs text-slate-400 truncate">Manage your wealth</p>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setCollapsed(!collapsed)}
+              className="flex-shrink-0 h-9 w-9 hover:bg-slate-700/50 text-slate-300 hover:text-white rounded-lg transition-all"
+              title="Collapse sidebar"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+          </>
+        ) : (
+          <div className="flex flex-col items-center gap-3 w-full">
             <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg flex items-center justify-center">
-              <Wallet className="h-5 w-5 text-white" />
+              <Wallet className="h-5 w-5 text-white flex-shrink-0" />
             </div>
-            <div className="flex-1 min-w-0">
-              <h1 className="font-bold text-base bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent truncate">
-                FinanceTracker
-              </h1>
-              <p className="text-xs text-slate-400 truncate">Manage your wealth</p>
-            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setCollapsed(!collapsed)}
+              className="flex-shrink-0 h-9 w-9 hover:bg-slate-700/50 text-slate-300 hover:text-white rounded-lg transition-all"
+              title="Expand sidebar"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </Button>
           </div>
         )}
-        
-        {collapsed && (
-          <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg flex items-center justify-center">
-            <Wallet className="h-5 w-5 text-white flex-shrink-0" />
-          </div>
-        )}
-        
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setCollapsed(!collapsed)}
-          className={cn(
-            "flex-shrink-0 h-9 w-9 hover:bg-slate-700/50 text-slate-300 hover:text-white rounded-lg transition-all",
-            collapsed && "mt-2"
-          )}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {collapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
-        </Button>
       </div>
 
       {/* Notifications Badge - Shows when not collapsed */}

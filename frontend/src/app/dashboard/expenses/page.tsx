@@ -478,9 +478,12 @@ export default function ExpensesPage() {
           {/* Sidebar Toggle Button */}
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="fixed left-0 top-1/2 -translate-y-1/2 z-40 bg-indigo-600 text-white p-3 rounded-r-xl shadow-lg hover:bg-indigo-700 transition-all"
+            className={cn(
+              "fixed top-1/2 -translate-y-1/2 z-40 bg-indigo-600 text-white p-2 rounded-xl shadow-lg hover:bg-indigo-700 transition-all",
+              sidebarCollapsed ? "left-4" : "left-[calc(33.333%-1rem)]"
+            )}
           >
-            {sidebarCollapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
+            {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </button>
 
           {/* Main Content - Timeline View */}
