@@ -15,7 +15,10 @@ import { toast } from 'sonner'
 import { budgetApi, Budget } from '@/lib/api'
 import { useCurrency } from '@/hooks/useCurrency'
 import { cn } from '@/lib/utils'
+import { getErrorMessage } from '@/lib/error-utils'
 import { Progress } from '@/components/ui/progress'
+import { ConfirmDialog } from '@/components/ui/alert-dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 interface BudgetWithStats extends Budget {
   spent?: number
@@ -53,6 +56,7 @@ export default function BudgetsPage() {
   const [showForm, setShowForm] = useState(false)
   const [editingBudget, setEditingBudget] = useState<BudgetWithStats | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [formData, setFormData] = useState<Budget>({
     name: '',
     amount: 0,
@@ -71,7 +75,7 @@ export default function BudgetsPage() {
       const response = await budgetApi.list()
       setBudgets(response || [])
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Failed to fetch budgets')
+      toast.error(getErrorMessage(error) || 'Failed to fetch budgets')
     } finally {
       setLoading(false)
     }
@@ -117,20 +121,19 @@ export default function BudgetsPage() {
       })
       fetchBudgets()
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || `Failed to ${editingBudget ? 'update' : 'add'} budget`)
+      toast.error(getErrorMessage(error) || `Failed to ${editingBudget ? 'update' : 'add'} budget`)
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this budget? This action cannot be undone.')) return
-    
     try {
       await budgetApi.delete(id)
       toast.success('Budget deleted successfully!')
       fetchBudgets()
     } catch (error: any) {
-      console.error('Failed to delete budget:', error)
-      toast.error(error.response?.data?.detail || 'Failed to delete budget')
+      toast.error(getErrorMessage(error) || 'Failed to delete budget')
+    } finally {
+      setDeleteTarget(null)
     }
   }
 
@@ -166,16 +169,16 @@ export default function BudgetsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-amber-50/20">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-amber-50/20 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
       {/* Enhanced Header */}
-      <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-slate-200/50 shadow-sm">
+      <div className="sticky top-0 z-30 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-700/50 shadow-sm">
         <div className="p-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
                 Budget Tracker
               </h1>
-              <p className="text-slate-600 text-sm mt-1">Plan your spending and stay on track</p>
+              <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Plan your spending and stay on track</p>
             </div>
             
             <div className="flex flex-wrap gap-2">
@@ -199,11 +202,11 @@ export default function BudgetsPage() {
           </div>
 
           {/* Overall Progress */}
-          <div className="mt-6 bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200/50 rounded-2xl p-6">
+          <div className="mt-6 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 border border-amber-200/50 dark:border-amber-700/30 rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-slate-900">Overall Budget Health</h3>
-                <p className="text-sm text-slate-600">{format(totalSpent)} of {format(totalBudget)} spent</p>
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Overall Budget Health</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-400">{format(totalSpent)} of {format(totalBudget)} spent</p>
               </div>
               <div className="text-right">
                 <p className="text-3xl font-bold text-amber-600">{overallPercentage.toFixed(1)}%</p>
@@ -212,24 +215,24 @@ export default function BudgetsPage() {
             </div>
             <Progress value={overallPercentage} className="h-3 mb-4" />
             <div className="grid grid-cols-3 gap-3">
-              <div className="bg-white/60 rounded-xl p-3 border border-emerald-200/50">
+              <div className="bg-white/60 dark:bg-slate-800/60 rounded-xl p-3 border border-emerald-200/50 dark:border-emerald-700/30">
                 <div className="flex items-center gap-2 mb-1">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  <span className="text-xs font-medium text-slate-600">On Track</span>
+                  <span className="text-xs font-medium text-slate-600 dark:text-slate-400">On Track</span>
                 </div>
                 <p className="text-2xl font-bold text-emerald-600">{onTrackBudgets}</p>
               </div>
-              <div className="bg-white/60 rounded-xl p-3 border border-yellow-200/50">
+              <div className="bg-white/60 dark:bg-slate-800/60 rounded-xl p-3 border border-yellow-200/50 dark:border-yellow-700/30">
                 <div className="flex items-center gap-2 mb-1">
                   <Clock className="h-4 w-4 text-yellow-600" />
-                  <span className="text-xs font-medium text-slate-600">Near Limit</span>
+                  <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Near Limit</span>
                 </div>
                 <p className="text-2xl font-bold text-yellow-600">{nearLimitBudgets}</p>
               </div>
-              <div className="bg-white/60 rounded-xl p-3 border border-red-200/50">
+              <div className="bg-white/60 dark:bg-slate-800/60 rounded-xl p-3 border border-red-200/50 dark:border-red-700/30">
                 <div className="flex items-center gap-2 mb-1">
                   <AlertTriangle className="h-4 w-4 text-red-600" />
-                  <span className="text-xs font-medium text-slate-600">Exceeded</span>
+                  <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Exceeded</span>
                 </div>
                 <p className="text-2xl font-bold text-red-600">{exceededBudgets}</p>
               </div>
@@ -239,15 +242,15 @@ export default function BudgetsPage() {
           {/* Quick Stats */}
           <div className="grid grid-cols-3 gap-4 mt-4">
             <div className="bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-200/50 rounded-xl p-4">
-              <p className="text-xs font-medium text-slate-600 mb-1">Total Budget</p>
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Total Budget</p>
               <p className="text-xl font-bold text-blue-600">{format(totalBudget)}</p>
             </div>
             <div className="bg-gradient-to-br from-rose-500/10 to-pink-500/10 border border-rose-200/50 rounded-xl p-4">
-              <p className="text-xs font-medium text-slate-600 mb-1">Total Spent</p>
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Total Spent</p>
               <p className="text-xl font-bold text-rose-600">{format(totalSpent)}</p>
             </div>
             <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border border-emerald-200/50 rounded-xl p-4">
-              <p className="text-xs font-medium text-slate-600 mb-1">Remaining</p>
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Remaining</p>
               <p className="text-xl font-bold text-emerald-600">{format(totalRemaining)}</p>
             </div>
           </div>
@@ -301,7 +304,7 @@ export default function BudgetsPage() {
               return (
                 <Card 
                   key={budget.id} 
-                  className="group border-none shadow-xl hover:shadow-2xl transition-all duration-300 bg-white rounded-3xl overflow-hidden hover:scale-[1.02]"
+                  className="group border-none shadow-xl hover:shadow-2xl transition-all duration-300 bg-white dark:bg-slate-900 rounded-3xl overflow-hidden"
                 >
                   {/* Header with Icon */}
                   <div className={cn("bg-gradient-to-br p-6 text-white relative overflow-hidden", gradient)}>
@@ -327,10 +330,10 @@ export default function BudgetsPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-semibold text-slate-600">Progress</span>
-                          <span className="text-lg font-bold text-slate-900">{percentage.toFixed(1)}%</span>
+                          <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">Progress</span>
+                          <span className="text-lg font-bold text-slate-900 dark:text-white">{percentage.toFixed(1)}%</span>
                         </div>
-                        <div className="relative h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="relative h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                           <div 
                             className={cn("h-full transition-all duration-500", statusColor)}
                             style={{ width: `${Math.min(percentage, 100)}%` }}
@@ -341,12 +344,12 @@ export default function BudgetsPage() {
 
                     {/* Amount Details */}
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-slate-50 rounded-xl p-3">
+                      <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3">
                         <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mb-1">Budget</p>
-                        <p className="text-base font-bold text-slate-900">{format(budget.amount)}</p>
+                        <p className="text-base font-bold text-slate-900 dark:text-white">{format(budget.amount)}</p>
                       </div>
-                      <div className={cn("rounded-xl p-3", isOverBudget ? "bg-red-50" : "bg-emerald-50")}>
-                        <p className={cn("text-[10px] font-semibold uppercase tracking-wider mb-1", isOverBudget ? "text-red-700" : "text-emerald-700")}>
+                      <div className={cn("rounded-xl p-3", isOverBudget ? "bg-red-50 dark:bg-red-950/30" : "bg-emerald-50 dark:bg-emerald-950/30")}>
+                        <p className={cn("text-[10px] font-semibold uppercase tracking-wider mb-1", isOverBudget ? "text-red-700 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400")}>
                           {isOverBudget ? 'Over By' : 'Remaining'}
                         </p>
                         <p className={cn("text-base font-bold", isOverBudget ? "text-red-600" : "text-emerald-600")}>
@@ -356,28 +359,38 @@ export default function BudgetsPage() {
                     </div>
 
                     {/* Spent Amount */}
-                    <div className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-xl p-3">
+                    <div className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-800/80 rounded-xl p-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-slate-600">Spent</span>
-                        <span className="text-lg font-bold text-slate-900">{format(budget.spent || 0)}</span>
+                        <span className="text-sm text-slate-600 dark:text-slate-400">Spent</span>
+                        <span className="text-lg font-bold text-slate-900 dark:text-white">{format(budget.spent || 0)}</span>
                       </div>
                     </div>
 
-                    {/* Date Range */}
-                    <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 px-3 py-2 rounded-lg">
-                      <Calendar className="h-3.5 w-3.5" />
-                      {new Date(budget.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(budget.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    {/* Date Range + Remaining Days */}
+                    <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 px-3 py-2 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-3.5 w-3.5" />
+                        {new Date(budget.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(budget.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </div>
+                      {(() => {
+                        const daysLeft = Math.max(0, Math.ceil((new Date(budget.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+                        return (
+                          <span className={cn("font-semibold", daysLeft <= 3 ? "text-red-600" : daysLeft <= 7 ? "text-amber-600" : "text-slate-600")}>
+                            {daysLeft === 0 ? 'Ended' : `${daysLeft}d left`}
+                          </span>
+                        )
+                      })()}
                     </div>
 
                     {/* Warnings */}
                     {isOverBudget && (
-                      <div className="flex items-center gap-2 text-xs text-red-700 bg-red-50 p-3 rounded-xl border border-red-200">
+                      <div className="flex items-center gap-2 text-xs text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/30 p-3 rounded-xl border border-red-200 dark:border-red-800/50">
                         <AlertTriangle className="h-4 w-4 flex-shrink-0" />
                         <span className="font-semibold">Budget exceeded!</span>
                       </div>
                     )}
                     {isNearLimit && !isOverBudget && (
-                      <div className="flex items-center gap-2 text-xs text-yellow-700 bg-yellow-50 p-3 rounded-xl border border-yellow-200">
+                      <div className="flex items-center gap-2 text-xs text-yellow-700 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-950/30 p-3 rounded-xl border border-yellow-200 dark:border-yellow-800/50">
                         <Clock className="h-4 w-4 flex-shrink-0" />
                         <span className="font-semibold">Approaching limit</span>
                       </div>
@@ -388,7 +401,7 @@ export default function BudgetsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-xl font-semibold"
+                        className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950 rounded-xl font-semibold"
                         onClick={() => handleEdit(budget)}
                       >
                         <Edit className="h-4 w-4 mr-2" />
@@ -397,8 +410,8 @@ export default function BudgetsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl font-semibold"
-                        onClick={() => budget.id && handleDelete(budget.id)}
+                        className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-xl font-semibold"
+                        onClick={() => budget.id && setDeleteTarget(budget.id)}
                       >
                         <Trash2 className="h-4 w-4 mr-2" />
                         Delete
@@ -413,10 +426,20 @@ export default function BudgetsPage() {
       </div>
 
       {/* Enhanced Modal */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Delete Budget"
+        description="Are you sure you want to delete this budget? This action cannot be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => deleteTarget && handleDelete(deleteTarget)}
+      />
+
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <Card className="w-full max-w-2xl rounded-3xl border-none shadow-2xl max-h-[90vh] overflow-y-auto">
-            <CardHeader className="border-b border-slate-200 bg-gradient-to-r from-amber-50 to-orange-50">
+          <Card className="w-full max-w-2xl rounded-3xl border-none shadow-2xl max-h-[90vh] overflow-y-auto dark:bg-slate-900">
+            <CardHeader className="border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-slate-800 dark:to-slate-800">
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-2xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
@@ -458,15 +481,19 @@ export default function BudgetsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Period</Label>
-                  <select 
-                    className="w-full p-2 border rounded-xl"
+                  <Select
                     value={formData.period}
-                    onChange={(e) => setFormData({...formData, period: e.target.value})}
+                    onValueChange={(val) => setFormData({...formData, period: val})}
                   >
-                    <option value="weekly">Weekly</option>
-                    <option value="monthly">Monthly</option>
-                    <option value="yearly">Yearly</option>
-                  </select>
+                    <SelectTrigger className="rounded-xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="yearly">Yearly</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Start Date</Label>

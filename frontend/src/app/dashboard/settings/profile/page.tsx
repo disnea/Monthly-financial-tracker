@@ -8,7 +8,8 @@ import { Label } from '@/components/ui/label'
 import { User, Camera, Mail, Phone, Globe, DollarSign, Upload, FileText } from 'lucide-react'
 import { useAuthStore } from '@/lib/store'
 import { toast } from 'sonner'
-import { authApiClient, financeApiClient } from '@/lib/api'
+import { authApi, authApiClient, financeApiClient } from '@/lib/api'
+import { getErrorMessage } from '@/lib/error-utils'
 
 export default function ProfilePage() {
   const user = useAuthStore((state) => state.user)
@@ -33,7 +34,7 @@ export default function ProfilePage() {
       const authStore = useAuthStore.getState()
       authStore.setAuth(response.data.user, authStore.token!)
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Failed to update profile')
+      toast.error(getErrorMessage(error) || 'Failed to update profile')
     } finally {
       setLoading(false)
     }
@@ -57,7 +58,7 @@ export default function ProfilePage() {
       setProfileImage(response.data.image_url)
       toast.success('Profile image uploaded successfully!')
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Failed to upload image')
+      toast.error(getErrorMessage(error) || 'Failed to upload image')
     } finally {
       setUploading(false)
     }
@@ -86,7 +87,7 @@ export default function ProfilePage() {
       
       toast.success(`Imported ${response.data.imported_count} transactions from ${response.data.total_transactions} total`)
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Failed to import bank statement')
+      toast.error(getErrorMessage(error) || 'Failed to import bank statement')
     } finally {
       setImportingStatement(false)
     }

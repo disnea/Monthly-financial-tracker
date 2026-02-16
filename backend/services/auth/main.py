@@ -24,7 +24,7 @@ app = FastAPI(title="Auth Service", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -35,10 +35,10 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Initialize MinIO client
 minio_client = Minio(
-    "minio:9000",
+    settings.MINIO_ENDPOINT,
     access_key=settings.MINIO_ACCESS_KEY,
     secret_key=settings.MINIO_SECRET_KEY,
-    secure=False
+    secure=settings.MINIO_SECURE
 )
 
 # Ensure buckets exist
@@ -161,7 +161,11 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
 
 @app.post("/login", response_model=TokenResponse)
 async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.email == request.email))
+    # For login, we need to find the user across all tenants
+    # In a real app, you might have a subdomain or tenant identifier in the login
+    result = await db.execute(
+        select(User).where(User.email == request.email, User.is_active == True)
+    )
     user = result.scalar_one_or_none()
     
     if not user or not verify_password(request.password, user.password_hash):

@@ -55,10 +55,10 @@ export default function StockSearch({ onSelectStock, currentSymbol }: StockSearc
     const searchStocks = async () => {
       setLoading(true)
       try {
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost/api'
-        const response = await fetch(`${baseUrl}/investment/stocks/search?query=${encodeURIComponent(query)}`, {
+        const investmentUrl = process.env.NEXT_PUBLIC_INVESTMENT_URL || 'http://localhost:8004'
+        const response = await fetch(`${investmentUrl}/stocks/search?query=${encodeURIComponent(query)}`, {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
             'Content-Type': 'application/json'
           }
         })

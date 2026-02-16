@@ -13,7 +13,7 @@ async def auth_middleware(request: Request, call_next):
     Validate JWT token and extract user information
     """
     # Allow OPTIONS requests for CORS preflight
-    if request.method == "OPTIONS":
+    if request.method in ["OPTIONS", "HEAD"]:
         return await call_next(request)
     
     auth_header = request.headers.get("Authorization")

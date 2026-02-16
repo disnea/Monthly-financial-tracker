@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { authApi } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { toast } from 'sonner'
-import { Wallet, ArrowRight } from 'lucide-react'
+import { Wallet, ArrowRight, Eye, EyeOff } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -18,46 +18,18 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleLogin = async (e: React.FormEvent) => {
-    console.log('🚀 Login button clicked!')
     e.preventDefault()
     setLoading(true)
-    console.log('📧 Email:', email)
-    console.log('🔑 Password:', password ? '***' : 'empty')
 
     try {
-      console.log('🔐 Calling authApi.login...')
-      console.log('📤 Request data:', { email, password: '***' })
       const response = await authApi.login({ email, password })
-      console.log('✅ Login API successful!')
-      console.log('📥 Response:', response)
-      console.log('🎫 Token received:', response.access_token ? response.access_token.substring(0, 20) + '...' : 'MISSING')
-      console.log('👤 User received:', response.user)
-      
       setAuth(response.user, response.access_token)
-      console.log('💾 setAuth called, checking localStorage...')
-      
-      // Wait a bit for state to update
-      setTimeout(() => {
-        console.log('📦 localStorage after setAuth:', localStorage.getItem('auth_token') ? 'EXISTS' : 'MISSING')
-        console.log('🔐 isAuthenticated check:', useAuthStore.getState().isAuthenticated())
-        
-        toast.success('Welcome back!')
-        
-        // Only redirect if authentication is confirmed
-        if (localStorage.getItem('auth_token')) {
-          console.log('🔄 Redirecting to dashboard')
-          router.push('/dashboard')
-        } else {
-          console.error('❌ Token not found in localStorage after setAuth')
-          toast.error('Login failed - please try again')
-          setLoading(false)
-        }
-      }, 200)
+      toast.success('Welcome back!')
+      router.push('/dashboard')
     } catch (error: any) {
-      console.error('❌ Login error:', error)
-      console.error('❌ Error response:', error.response?.data)
       toast.error(error.response?.data?.detail || 'Login failed')
       setLoading(false)
     }
@@ -90,16 +62,35 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="h-11"
-              />
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <button
+                  type="button"
+                  onClick={() => toast.info('Password reset is not available yet. Please contact support.')}
+                  className="text-xs text-primary hover:underline"
+                >
+                  Forgot password?
+                </button>
+              </div>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="h-11 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">

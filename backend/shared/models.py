@@ -168,6 +168,106 @@ class Budget(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
+class Borrowing(Base):
+    __tablename__ = "borrowings"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    lender_name = Column(String(255), nullable=False)
+    lender_contact = Column(String(255))
+    principal_amount = Column(DECIMAL(15, 2), nullable=False)
+    currency = Column(String(3), default='INR')
+    interest_rate = Column(DECIMAL(5, 2), default=0)
+    interest_type = Column(String(20), default='none')  # 'none', 'simple', 'compound'
+    borrowed_date = Column(Date, nullable=False)
+    due_date = Column(Date)
+    purpose = Column(Text)
+    tags = Column(ARRAY(Text))
+    status = Column(String(20), default='open')  # 'open', 'partially_paid', 'closed'
+    total_repaid = Column(DECIMAL(15, 2), default=0)
+    remaining_amount = Column(DECIMAL(15, 2))
+    notes = Column(Text)
+    closed_at = Column(TIMESTAMP(timezone=True))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    repayments = relationship("BorrowingRepayment", back_populates="borrowing", cascade="all, delete-orphan")
+
+class BorrowingRepayment(Base):
+    __tablename__ = "borrowing_repayments"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
+    borrowing_id = Column(UUID(as_uuid=True), ForeignKey('borrowings.id', ondelete='CASCADE'), nullable=False)
+    amount = Column(DECIMAL(15, 2), nullable=False)
+    repayment_date = Column(Date, nullable=False)
+    payment_method = Column(String(50))
+    reference_number = Column(String(255))
+    note = Column(Text)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    borrowing = relationship("Borrowing", back_populates="repayments")
+
+class Income(Base):
+    __tablename__ = "income"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    source = Column(String(50), nullable=False)  # salary, freelance, dividends, rental, gift, other
+    amount = Column(DECIMAL(15, 2), nullable=False)
+    currency = Column(String(3), default='INR')
+    income_date = Column(Date, nullable=False)
+    description = Column(Text)
+    is_recurring = Column(Boolean, default=False)
+    recurrence_period = Column(String(20))  # monthly, weekly, yearly
+    notes = Column(Text)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+class Lending(Base):
+    __tablename__ = "lendings"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    borrower_name = Column(String(255), nullable=False)
+    borrower_contact = Column(String(255))
+    principal_amount = Column(DECIMAL(15, 2), nullable=False)
+    currency = Column(String(3), default='INR')
+    interest_rate = Column(DECIMAL(5, 2), default=0)
+    interest_type = Column(String(20), default='none')  # 'none', 'simple', 'compound'
+    lent_date = Column(Date, nullable=False)
+    due_date = Column(Date)
+    purpose = Column(Text)
+    status = Column(String(20), default='open')  # 'open', 'partially_received', 'closed'
+    total_received = Column(DECIMAL(15, 2), default=0)
+    remaining_amount = Column(DECIMAL(15, 2))
+    notes = Column(Text)
+    closed_at = Column(TIMESTAMP(timezone=True))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    collections = relationship("LendingCollection", back_populates="lending", cascade="all, delete-orphan")
+
+class LendingCollection(Base):
+    __tablename__ = "lending_collections"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
+    lending_id = Column(UUID(as_uuid=True), ForeignKey('lendings.id', ondelete='CASCADE'), nullable=False)
+    amount = Column(DECIMAL(15, 2), nullable=False)
+    collection_date = Column(Date, nullable=False)
+    payment_method = Column(String(50))
+    reference_number = Column(String(255))
+    note = Column(Text)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    lending = relationship("Lending", back_populates="collections")
+
 class Watchlist(Base):
     __tablename__ = "watchlist"
     

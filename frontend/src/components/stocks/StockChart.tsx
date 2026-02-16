@@ -137,7 +137,6 @@ export default function StockChart({ data, symbol, chartType = 'candlestick' }: 
       }
 
       series.setData(chartData as any)
-      console.log(`Chart rendered with ${chartData.length} data points`)
     } catch (error) {
       console.error('Error setting chart data:', error)
     }

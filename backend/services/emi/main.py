@@ -21,7 +21,7 @@ app = FastAPI(title="EMI Service", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -180,6 +180,14 @@ def generate_emi_schedule(
 async def health_check():
     return {"status": "healthy", "service": "emi"}
 
+@app.options("/emis")
+async def options_handler():
+    return {"status": "ok"}
+
+@app.head("/emis")
+async def head_handler():
+    return {"status": "ok"}
+
 @app.post("/emis", response_model=EMIResponse)
 async def create_emi(
     emi: EMICreate,
@@ -250,7 +258,9 @@ async def create_emi(
         total_interest=float(total_interest),
         total_amount=float(total_amount),
         paid_months=0,
-        remaining_amount=float(total_amount)
+        remaining_amount=float(total_amount),
+        remaining_principal=float(principal),
+        remaining_interest=float(total_interest)
     )
 
 @app.get("/emis", response_model=List[EMIResponse])

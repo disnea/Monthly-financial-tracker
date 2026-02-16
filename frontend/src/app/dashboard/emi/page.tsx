@@ -15,7 +15,10 @@ import { toast } from 'sonner'
 import { emiApi, EMI, EMIPayment } from '@/lib/api'
 import { useCurrency } from '@/hooks/useCurrency'
 import { cn } from '@/lib/utils'
+import { getErrorMessage } from '@/lib/error-utils'
 import { Progress } from '@/components/ui/progress'
+import { ConfirmDialog } from '@/components/ui/alert-dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export default function EMIPage() {
   const { currency, symbol, format } = useCurrency()
@@ -27,6 +30,7 @@ export default function EMIPage() {
   const [editingEmi, setEditingEmi] = useState<EMI | null>(null)
   const [schedule, setSchedule] = useState<EMIPayment[]>([])
   const [loadingSchedule, setLoadingSchedule] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [formData, setFormData] = useState<EMI>({
     loan_type: '',
     lender_name: '',
@@ -136,19 +140,19 @@ export default function EMIPage() {
       })
       fetchEMIs()
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || `Failed to ${editingEmi ? 'update' : 'add'} EMI loan`)
+      toast.error(getErrorMessage(error) || `Failed to ${editingEmi ? 'update' : 'add'} EMI loan`)
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this EMI loan?')) return
-    
     try {
       await emiApi.delete(id)
       toast.success('EMI loan deleted successfully!')
       fetchEMIs()
     } catch (error: any) {
       toast.error('Failed to delete EMI loan')
+    } finally {
+      setDeleteTarget(null)
     }
   }
 
@@ -175,8 +179,6 @@ export default function EMIPage() {
       if (selectedEmi?.id) {
         // Get fresh data first
         const updatedEmi = await emiApi.get(selectedEmi.id)
-        console.log('Updated EMI data:', updatedEmi)
-        
         // Update the modal header with fresh data
         setSelectedEmi(updatedEmi)
         
@@ -215,16 +217,16 @@ export default function EMIPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/20">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/20 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
       {/* Enhanced Header */}
-      <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-slate-200/50 shadow-sm">
+      <div className="sticky top-0 z-30 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-700/50 shadow-sm">
         <div className="p-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
                 EMI Loans
               </h1>
-              <p className="text-slate-600 text-sm mt-1">Manage loans and track your payment schedule</p>
+              <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Manage loans and track your payment schedule</p>
             </div>
             
             <div className="flex flex-wrap gap-2">
@@ -249,19 +251,19 @@ export default function EMIPage() {
           {/* Quick Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
             <div className="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-200/50 rounded-xl p-4">
-              <p className="text-xs font-medium text-slate-600 mb-1">Total Principal</p>
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Total Principal</p>
               <p className="text-2xl font-bold text-blue-600">{format(totalPrincipal)}</p>
             </div>
             <div className="bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-200/50 rounded-xl p-4">
-              <p className="text-xs font-medium text-slate-600 mb-1">Monthly EMI</p>
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Monthly EMI</p>
               <p className="text-2xl font-bold text-blue-600">{format(totalMonthlyEMI)}</p>
             </div>
             <div className="bg-gradient-to-br from-rose-500/10 to-pink-500/10 border border-rose-200/50 rounded-xl p-4">
-              <p className="text-xs font-medium text-slate-600 mb-1">Total Interest</p>
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Total Interest</p>
               <p className="text-2xl font-bold text-rose-600">{format(totalInterest)}</p>
             </div>
             <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border border-emerald-200/50 rounded-xl p-4">
-              <p className="text-xs font-medium text-slate-600 mb-1">Active Loans</p>
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Active Loans</p>
               <p className="text-2xl font-bold text-emerald-600">{emis.length}</p>
             </div>
           </div>
@@ -312,7 +314,7 @@ export default function EMIPage() {
               return (
                 <Card 
                   key={emi.id} 
-                  className="group border-none shadow-xl hover:shadow-2xl transition-all duration-300 bg-white rounded-3xl overflow-hidden hover:scale-[1.02]"
+                  className="group border-none shadow-xl hover:shadow-2xl transition-all duration-300 bg-white dark:bg-slate-900 rounded-3xl overflow-hidden hover:scale-[1.02]"
                 >
                   {/* Header with Icon */}
                   <div className="bg-gradient-to-br from-blue-500 to-cyan-600 p-6 text-white relative overflow-hidden">
@@ -337,7 +339,7 @@ export default function EMIPage() {
                     {/* Progress Bar */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-semibold text-slate-600">Payment Progress</span>
+                        <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Payment Progress</span>
                         <span className="text-xs font-bold text-blue-600">{progress.toFixed(1)}%</span>
                       </div>
                       <Progress value={progress} className="h-2" />
@@ -349,24 +351,24 @@ export default function EMIPage() {
 
                     {/* Key Metrics */}
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-slate-50 rounded-xl p-3">
+                      <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3">
                         <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mb-1">Principal</p>
-                        <p className="text-base font-bold text-slate-900">{format(emi.principal_amount)}</p>
+                        <p className="text-base font-bold text-slate-900 dark:text-white">{format(emi.principal_amount)}</p>
                       </div>
-                      <div className="bg-emerald-50 rounded-xl p-3">
+                      <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-xl p-3">
                         <p className="text-[10px] text-emerald-700 font-semibold uppercase tracking-wider mb-1">Monthly EMI</p>
                         <p className="text-base font-bold text-emerald-600">{format(emi.monthly_emi || 0)}</p>
                       </div>
                     </div>
 
                     {/* Financial Details */}
-                    <div className="pt-3 border-t border-slate-100 space-y-2">
+                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-slate-500 flex items-center gap-1">
                           <Percent className="h-3 w-3" />
                           Interest Rate
                         </span>
-                        <span className="font-semibold text-slate-900">{emi.interest_rate}% p.a.</span>
+                        <span className="font-semibold text-slate-900 dark:text-white">{emi.interest_rate}% p.a.</span>
                       </div>
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-slate-500">Total Interest</span>
@@ -383,7 +385,7 @@ export default function EMIPage() {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                    <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
                       <button
                         onClick={() => handleViewSchedule(emi)}
                         className="text-xs font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1"
@@ -395,7 +397,7 @@ export default function EMIPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg"
+                          className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950 rounded-lg"
                           onClick={() => handleEdit(emi)}
                         >
                           <Edit className="h-4 w-4" />
@@ -403,8 +405,8 @@ export default function EMIPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-8 w-8 p-0 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg"
-                          onClick={() => emi.id && handleDelete(emi.id)}
+                          className="h-8 w-8 p-0 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-lg"
+                          onClick={() => emi.id && setDeleteTarget(emi.id)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -424,11 +426,22 @@ export default function EMIPage() {
         )}
       </div>
 
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Delete EMI Loan"
+        description="Are you sure you want to delete this EMI loan? All payment schedule data will be lost. This action cannot be undone."
+        confirmLabel="Delete Loan"
+        variant="destructive"
+        onConfirm={() => deleteTarget && handleDelete(deleteTarget)}
+      />
+
       {/* Add EMI Modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <Card className="w-full max-w-2xl rounded-3xl border-none shadow-2xl max-h-[90vh] overflow-y-auto">
-            <CardHeader className="border-b border-slate-200 bg-gradient-to-r from-blue-50 to-cyan-50">
+          <Card className="w-full max-w-2xl rounded-3xl border-none shadow-2xl max-h-[90vh] overflow-y-auto dark:bg-slate-900">
+            <CardHeader className="border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-slate-800 dark:to-slate-800">
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
@@ -448,12 +461,32 @@ export default function EMIPage() {
             </CardHeader>
             <CardContent className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 space-y-2">
+                <div className="space-y-2">
                   <Label>Loan Type *</Label>
+                  <Select
+                    value={formData.loan_type || ''}
+                    onValueChange={(val) => setFormData({...formData, loan_type: val})}
+                  >
+                    <SelectTrigger className="rounded-xl">
+                      <SelectValue placeholder="Select loan type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Home Loan">Home Loan</SelectItem>
+                      <SelectItem value="Car Loan">Car Loan</SelectItem>
+                      <SelectItem value="Personal Loan">Personal Loan</SelectItem>
+                      <SelectItem value="Education Loan">Education Loan</SelectItem>
+                      <SelectItem value="Gold Loan">Gold Loan</SelectItem>
+                      <SelectItem value="Business Loan">Business Loan</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Account Number</Label>
                   <Input 
-                    placeholder="Home Loan, Car Loan, Personal Loan..." 
-                    value={formData.loan_type}
-                    onChange={(e) => setFormData({...formData, loan_type: e.target.value})}
+                    placeholder="Loan account number" 
+                    value={formData.account_number || ''}
+                    onChange={(e) => setFormData({...formData, account_number: e.target.value})}
                     className="rounded-xl"
                   />
                 </div>
@@ -489,14 +522,18 @@ export default function EMIPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Interest Type *</Label>
-                  <select 
-                    className="w-full p-2 border rounded-xl bg-white"
+                  <Select
                     value={formData.interest_type || 'reducing'}
-                    onChange={(e) => setFormData({...formData, interest_type: e.target.value})}
+                    onValueChange={(val) => setFormData({...formData, interest_type: val})}
                   >
-                    <option value="reducing">Reducing Balance</option>
-                    <option value="flat">Flat Rate</option>
-                  </select>
+                    <SelectTrigger className="rounded-xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="reducing">Reducing Balance</SelectItem>
+                      <SelectItem value="flat">Flat Rate</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <p className="text-xs text-slate-500">
                     {formData.interest_type === 'flat' 
                       ? 'Flat: Interest calculated on original principal' 
@@ -526,23 +563,23 @@ export default function EMIPage() {
 
               {/* Preview Calculation */}
               {formData.principal_amount > 0 && formData.interest_rate > 0 && formData.tenure_months > 0 && (
-                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-4 border border-blue-200">
-                  <p className="text-sm font-semibold text-slate-700 mb-3">Calculated EMI Details ({formData.interest_type === 'flat' ? 'Flat Rate' : 'Reducing Balance'}):</p>
+                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/30 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
+                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Calculated EMI Details ({formData.interest_type === 'flat' ? 'Flat Rate' : 'Reducing Balance'}):</p>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <p className="text-xs text-slate-600">Monthly EMI</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-400">Monthly EMI</p>
                       <p className="text-lg font-bold text-blue-600">
                         {format(calculateEMI(formData.principal_amount, formData.interest_rate, formData.tenure_months, formData.interest_type as 'reducing' | 'flat').emi)}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-600">Total Interest</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-400">Total Interest</p>
                       <p className="text-lg font-bold text-rose-600">
                         {format(calculateEMI(formData.principal_amount, formData.interest_rate, formData.tenure_months, formData.interest_type as 'reducing' | 'flat').totalInterest)}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-600">Total Amount</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-400">Total Amount</p>
                       <p className="text-lg font-bold text-blue-600">
                         {format(calculateEMI(formData.principal_amount, formData.interest_rate, formData.tenure_months, formData.interest_type as 'reducing' | 'flat').totalAmount)}
                       </p>
@@ -563,7 +600,7 @@ export default function EMIPage() {
                   onClick={handleSubmit}
                   className="flex-1 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
                 >
-                  Add Loan
+                  {editingEmi ? 'Save Changes' : 'Add Loan'}
                 </Button>
               </div>
             </CardContent>
@@ -574,8 +611,8 @@ export default function EMIPage() {
       {/* Schedule Modal */}
       {selectedEmi && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <Card className="w-full max-w-4xl rounded-3xl border-none shadow-2xl max-h-[90vh] overflow-y-auto">
-            <CardHeader className="border-b border-slate-200 bg-gradient-to-r from-blue-50 to-cyan-50 sticky top-0 z-10">
+          <Card className="w-full max-w-4xl rounded-3xl border-none shadow-2xl max-h-[90vh] overflow-y-auto dark:bg-slate-900">
+            <CardHeader className="border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-slate-800 dark:to-slate-800 sticky top-0 z-10">
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
@@ -593,25 +630,25 @@ export default function EMIPage() {
                 </Button>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
-                <div className="bg-white rounded-lg p-3">
-                  <p className="text-xs text-slate-600">Total Amount</p>
-                  <p className="text-lg font-bold text-slate-900">{format(selectedEmi.total_amount || 0)}</p>
+                <div className="bg-white dark:bg-slate-800 rounded-lg p-3">
+                  <p className="text-xs text-slate-600 dark:text-slate-400">Total Amount</p>
+                  <p className="text-lg font-bold text-slate-900 dark:text-white">{format(selectedEmi.total_amount || 0)}</p>
                 </div>
-                <div className="bg-white rounded-lg p-3">
-                  <p className="text-xs text-slate-600">Paid Months</p>
+                <div className="bg-white dark:bg-slate-800 rounded-lg p-3">
+                  <p className="text-xs text-slate-600 dark:text-slate-400">Paid Months</p>
                   <p className="text-lg font-bold text-emerald-600">{selectedEmi.paid_months || 0} / {selectedEmi.tenure_months}</p>
                 </div>
-                <div className="bg-white rounded-lg p-3">
-                  <p className="text-xs text-slate-600">Principal Left</p>
+                <div className="bg-white dark:bg-slate-800 rounded-lg p-3">
+                  <p className="text-xs text-slate-600 dark:text-slate-400">Principal Left</p>
                   <p className="text-lg font-bold text-blue-600">{format(selectedEmi.remaining_principal || 0)}</p>
                 </div>
-                <div className="bg-white rounded-lg p-3">
-                  <p className="text-xs text-slate-600">Interest Left</p>
+                <div className="bg-white dark:bg-slate-800 rounded-lg p-3">
+                  <p className="text-xs text-slate-600 dark:text-slate-400">Interest Left</p>
                   <p className="text-lg font-bold text-amber-600">{format(selectedEmi.remaining_interest || 0)}</p>
                 </div>
-                <div className="bg-white rounded-lg p-3">
-                  <p className="text-xs text-slate-600">Monthly EMI</p>
-                  <p className="text-lg font-bold text-slate-900">{format(selectedEmi.monthly_emi || 0)}</p>
+                <div className="bg-white dark:bg-slate-800 rounded-lg p-3">
+                  <p className="text-xs text-slate-600 dark:text-slate-400">Monthly EMI</p>
+                  <p className="text-lg font-bold text-slate-900 dark:text-white">{format(selectedEmi.monthly_emi || 0)}</p>
                 </div>
               </div>
             </CardHeader>
@@ -636,7 +673,9 @@ export default function EMIPage() {
                         "border rounded-xl p-4 transition-all",
                         payment.status === 'paid' 
                           ? "bg-emerald-50 border-emerald-200" 
-                          : "bg-white border-slate-200 hover:border-blue-300"
+                          : new Date(payment.due_date) < new Date() 
+                            ? "bg-red-50 dark:bg-red-950/20 border-red-300 dark:border-red-800"
+                            : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 hover:border-blue-300"
                       )}
                     >
                       <div className="flex items-center justify-between">
@@ -644,7 +683,7 @@ export default function EMIPage() {
                           <div className="flex items-center gap-3 mb-2">
                             <Badge variant={payment.status === 'paid' ? 'default' : 'outline'} className={cn(
                               "rounded-full",
-                              payment.status === 'paid' ? "bg-emerald-600" : "bg-slate-100 text-slate-700"
+                              payment.status === 'paid' ? "bg-emerald-600" : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
                             )}>
                               Installment #{payment.installment_number}
                             </Badge>
@@ -654,17 +693,23 @@ export default function EMIPage() {
                                 <span className="text-xs font-medium">Paid</span>
                               </div>
                             )}
+                            {payment.status !== 'paid' && new Date(payment.due_date) < new Date() && (
+                              <div className="flex items-center gap-1 text-red-600">
+                                <AlertCircle className="h-4 w-4" />
+                                <span className="text-xs font-medium">Overdue</span>
+                              </div>
+                            )}
                           </div>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                             <div>
                               <p className="text-xs text-slate-500">Due Date</p>
-                              <p className="font-semibold text-slate-900">
+                              <p className="font-semibold text-slate-900 dark:text-white">
                                 {new Date(payment.due_date).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
                               </p>
                             </div>
                             <div>
                               <p className="text-xs text-slate-500">Amount</p>
-                              <p className="font-semibold text-slate-900">{format(payment.amount)}</p>
+                              <p className="font-semibold text-slate-900 dark:text-white">{format(payment.amount)}</p>
                             </div>
                             <div>
                               <p className="text-xs text-slate-500">Principal</p>
@@ -704,8 +749,8 @@ export default function EMIPage() {
       {/* EMI Calculator Modal */}
       {showCalculator && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <Card className="w-full max-w-3xl rounded-3xl border-none shadow-2xl">
-            <CardHeader className="border-b border-slate-200 bg-gradient-to-r from-violet-50 to-purple-50">
+          <Card className="w-full max-w-3xl rounded-3xl border-none shadow-2xl dark:bg-slate-900">
+            <CardHeader className="border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-slate-800 dark:to-slate-800">
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-2xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
@@ -766,14 +811,14 @@ export default function EMIPage() {
                   <div className="space-y-3">
                     <Label className="text-sm font-semibold">Interest Type</Label>
                     <select 
-                      className="w-full p-3 border rounded-xl bg-white text-lg font-semibold"
+                      className="w-full p-3 border rounded-xl bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-white text-lg font-semibold"
                       value={calcData.interestType}
                       onChange={(e) => setCalcData({...calcData, interestType: e.target.value as 'reducing' | 'flat'})}
                     >
                       <option value="reducing">Reducing Balance</option>
                       <option value="flat">Flat Rate</option>
                     </select>
-                    <p className="text-xs text-slate-600">
+                    <p className="text-xs text-slate-600 dark:text-slate-400">
                       {calcData.interestType === 'flat' 
                         ? '💡 Flat: Higher total interest, same amount each month' 
                         : '💡 Reducing: Lower total interest, calculated on balance'}
@@ -820,17 +865,17 @@ export default function EMIPage() {
                     </div>
                   </div>
 
-                  <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+                  <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-600">Total Payment</span>
-                      <span className="text-lg font-bold text-slate-900">{format(calculatedEMI.totalAmount)}</span>
+                      <span className="text-sm text-slate-600 dark:text-slate-400">Total Payment</span>
+                      <span className="text-lg font-bold text-slate-900 dark:text-white">{format(calculatedEMI.totalAmount)}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-600">Total Interest</span>
+                      <span className="text-sm text-slate-600 dark:text-slate-400">Total Interest</span>
                       <span className="text-lg font-bold text-rose-600">{format(calculatedEMI.totalInterest)}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-600">Interest %</span>
+                      <span className="text-sm text-slate-600 dark:text-slate-400">Interest %</span>
                       <span className="text-lg font-bold text-blue-600">
                         {((calculatedEMI.totalInterest / calcData.principal) * 100).toFixed(1)}%
                       </span>

@@ -27,26 +27,12 @@ export default function RegisterPage() {
     e.preventDefault()
     setLoading(true)
 
-    console.log('🚀 Starting registration with data:', formData)
-
     try {
       const response = await authApi.register(formData)
-      console.log('✅ Registration successful:', response)
-      console.log('📝 Token received:', response.access_token)
-      
       setAuth(response.user, response.access_token)
-      console.log('💾 Token stored in store')
-      
       toast.success('Account created successfully!')
-      
-      // Small delay to ensure state is updated before redirect
-      setTimeout(() => {
-        console.log('🔄 Redirecting to dashboard')
-        router.push('/dashboard')
-      }, 100)
+      router.push('/dashboard')
     } catch (error: any) {
-      console.error('❌ Registration failed:', error)
-      console.error('Error response:', error.response?.data)
       toast.error(error.response?.data?.detail || 'Registration failed')
       setLoading(false)
     }

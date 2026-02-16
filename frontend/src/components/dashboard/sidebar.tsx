@@ -20,10 +20,15 @@ import {
   X,
   ChevronLeft,
   User2,
-  Crown
+  Crown,
+  Users2,
+  Download,
+  Banknote,
+  HeartHandshake
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Badge } from '@/components/ui/badge'
+import { ThemeToggle } from '@/components/ui/theme-toggle'
 
 interface NavSection {
   title: string
@@ -102,6 +107,38 @@ const navigationSections: NavSection[] = [
         description: 'Set financial goals',
         shortcut: 'B'
       },
+      { 
+        name: 'Income', 
+        href: '/dashboard/income', 
+        icon: Banknote, 
+        color: 'text-green-500',
+        description: 'Track your earnings',
+        shortcut: 'N'
+      },
+      { 
+        name: 'Borrowings', 
+        href: '/dashboard/borrowings', 
+        icon: Users2, 
+        color: 'text-teal-500',
+        description: 'Track money borrowed',
+        shortcut: 'R'
+      },
+      { 
+        name: 'Lendings', 
+        href: '/dashboard/lendings', 
+        icon: HeartHandshake, 
+        color: 'text-indigo-500',
+        description: 'Track money lent out',
+        shortcut: 'G'
+      },
+      { 
+        name: 'Export', 
+        href: '/dashboard/export', 
+        icon: Download, 
+        color: 'text-slate-500',
+        description: 'Download your data',
+        shortcut: 'X'
+      },
     ]
   },
   {
@@ -135,37 +172,8 @@ export function Sidebar() {
   }, [])
 
   const fetchNotifications = async () => {
-    // Sample notifications - replace with actual API call
-    const sampleNotifications: Notification[] = [
-      {
-        id: '1',
-        title: 'Budget Alert',
-        message: 'You have spent 85% of your monthly budget for Food & Dining',
-        type: 'warning',
-        read: false,
-        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
-        action: { label: 'View Budget', href: '/dashboard/budgets' }
-      },
-      {
-        id: '2',
-        title: 'Investment Update',
-        message: 'Your portfolio gained 2.5% this week',
-        type: 'success',
-        read: false,
-        timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000),
-        action: { label: 'View Portfolio', href: '/dashboard/investments' }
-      },
-      {
-        id: '3',
-        title: 'EMI Due Soon',
-        message: 'Home Loan EMI of ₹45,000 is due in 3 days',
-        type: 'info',
-        read: true,
-        timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000),
-        action: { label: 'View EMIs', href: '/dashboard/emi' }
-      },
-    ]
-    setNotifications(sampleNotifications)
+    // TODO: Replace with actual API call when notification service is ready
+    setNotifications([])
   }
 
   const markAsRead = (id: string) => {
@@ -543,6 +551,11 @@ export function Sidebar() {
           </div>
         </div>
       )}
+
+      {/* Theme Toggle */}
+      <div className="px-4 pb-2">
+        <ThemeToggle collapsed={collapsed} />
+      </div>
 
       {/* User Profile & Logout */}
       <div className="border-t border-slate-700/50 bg-slate-900/80 p-3">

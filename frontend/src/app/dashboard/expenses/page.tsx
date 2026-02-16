@@ -13,9 +13,14 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { expenseApi, Expense, Category, categoryApi, financeApiClient } from '@/lib/api'
-import { useAuthStore } from '@/lib/store'
 import { useCurrency } from '@/hooks/useCurrency'
+import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
+import { getErrorMessage } from '@/lib/error-utils'
+import { getCategoryIcon } from '@/lib/category-icons'
+import { getCategoryColor } from '@/lib/category-colors'
+import { ConfirmDialog } from '@/components/ui/alert-dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 // Icon mapping from backend icon string → Lucide component
 const iconMap: Record<string, any> = {
@@ -54,6 +59,9 @@ export default function ExpensesPage() {
   const [categoriesMaster, setCategoriesMaster] = useState<Category[]>([])
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({})
+  const [visibleCount, setVisibleCount] = useState(50)
   const [formData, setFormData] = useState({
     amount: 0,
     currency: currency,
@@ -62,18 +70,6 @@ export default function ExpensesPage() {
     payment_method: 'UPI',
     category_id: ''
   })
-
-  // Sample expenses
-  const sampleExpenses: Expense[] = [
-    { id: '1', amount: 3250, currency: 'INR', description: 'Grocery Shopping at BigBasket', transaction_date: '2024-01-15', payment_method: 'Credit Card', category_id: null, created_at: '2024-01-15T10:00:00Z', category_name: 'Food & Dining', category_color: '#f97316', category_icon: 'utensils' },
-    { id: '2', amount: 285, currency: 'INR', description: 'Uber Ride to Office', transaction_date: '2024-01-14', payment_method: 'UPI', category_id: null, created_at: '2024-01-14T09:00:00Z', category_name: 'Transportation', category_color: '#3b82f6', category_icon: 'car' },
-    { id: '3', amount: 850, currency: 'INR', description: 'Swiggy Food Order - Dinner', transaction_date: '2024-01-14', payment_method: 'Credit Card', category_id: null, created_at: '2024-01-14T20:00:00Z', category_name: 'Food & Dining', category_color: '#f97316', category_icon: 'utensils' },
-    { id: '4', amount: 2100, currency: 'INR', description: 'Electricity Bill Payment', transaction_date: '2024-01-13', payment_method: 'Net Banking', category_id: null, created_at: '2024-01-13T15:00:00Z', category_name: 'Utilities', category_color: '#10b981', category_icon: 'home' },
-    { id: '5', amount: 4500, currency: 'INR', description: 'Amazon Shopping - Electronics', transaction_date: '2024-01-12', payment_method: 'Credit Card', category_id: null, created_at: '2024-01-12T14:00:00Z', category_name: 'Shopping', category_color: '#a855f7', category_icon: 'shopping-bag' },
-    { id: '6', amount: 1200, currency: 'INR', description: 'Mobile Recharge - Airtel', transaction_date: '2024-01-11', payment_method: 'UPI', category_id: null, created_at: '2024-01-11T11:00:00Z', category_name: 'Utilities', category_color: '#10b981', category_icon: 'home' },
-    { id: '7', amount: 2800, currency: 'INR', description: 'Movie Tickets - PVR', transaction_date: '2024-01-10', payment_method: 'Credit Card', category_id: null, created_at: '2024-01-10T19:00:00Z', category_name: 'Entertainment', category_color: '#ec4899', category_icon: 'film' },
-    { id: '8', amount: 1500, currency: 'INR', description: 'Medicine Purchase', transaction_date: '2024-01-09', payment_method: 'Cash', category_id: null, created_at: '2024-01-09T16:00:00Z', category_name: 'Healthcare', category_color: '#ef4444', category_icon: 'heart' },
-  ]
 
   useEffect(() => {
     if (isAuthenticated && token) {
@@ -100,19 +96,9 @@ export default function ExpensesPage() {
   const fetchExpenses = async () => {
     try {
       const response = await expenseApi.list()
-      if (response && response.length > 0) {
-        setExpenses(response)
-      } else if (!isAuthenticated) {
-        setExpenses(sampleExpenses)
-      } else {
-        setExpenses([])
-      }
+      setExpenses(response || [])
     } catch (error: any) {
-      if (!isAuthenticated) {
-        setExpenses(sampleExpenses)
-      } else {
-        setExpenses([])
-      }
+      setExpenses([])
     } finally {
       setLoading(false)
     }
@@ -132,10 +118,16 @@ export default function ExpensesPage() {
   }
 
   const handleSubmit = async () => {
-    if (!formData.amount || !formData.description) {
-      toast.error('Please fill in all required fields')
+    const errors: Record<string, string> = {}
+    if (!formData.amount || formData.amount <= 0) errors.amount = 'Amount must be greater than zero'
+    if (!formData.description?.trim()) errors.description = 'Description is required'
+    if (!formData.transaction_date) errors.transaction_date = 'Date is required'
+    
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors)
       return
     }
+    setFormErrors({})
 
     try {
       if (editingExpense && editingExpense.id) {
@@ -157,19 +149,19 @@ export default function ExpensesPage() {
       })
       fetchExpenses()
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || `Failed to ${editingExpense ? 'update' : 'add'} expense`)
+      toast.error(getErrorMessage(error) || `Failed to ${editingExpense ? 'update' : 'add'} expense`)
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this expense?')) return
-    
     try {
       await expenseApi.delete(id)
       toast.success('Expense deleted successfully!')
       fetchExpenses()
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Failed to delete expense')
+      toast.error(getErrorMessage(error) || 'Failed to delete expense')
+    } finally {
+      setDeleteTarget(null)
     }
   }
 
@@ -195,7 +187,7 @@ export default function ExpensesPage() {
       toast.success(`Successfully imported ${response.data.imported_count} transactions!`)
       fetchExpenses()
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Failed to import bank statement')
+      toast.error(getErrorMessage(error) || 'Failed to import bank statement')
     } finally {
       setImportingStatement(false)
       e.target.value = ''
@@ -203,12 +195,14 @@ export default function ExpensesPage() {
   }
 
   // Filter expenses
-  const filteredExpenses = expenses.filter(expense => {
+  const allFilteredExpenses = expenses.filter(expense => {
     const matchesSearch = expense.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? true
     const matchesCategory = !selectedCategory || expense.category_id === selectedCategory
     const matchesDate = !selectedDate || expense.transaction_date.split('T')[0] === selectedDate
     return matchesSearch && matchesCategory && matchesDate
   })
+  const filteredExpenses = allFilteredExpenses.slice(0, visibleCount)
+  const hasMore = allFilteredExpenses.length > visibleCount
 
   // Group by date
   const groupedExpenses = filteredExpenses.reduce((acc, expense) => {
@@ -223,16 +217,16 @@ export default function ExpensesPage() {
   const categories = Array.from(new Set(expenses.map(e => e.category_name).filter(Boolean)))
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/20">
+    <div className="relative min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/20 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
       {/* Enhanced Header with Search */}
-      <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-slate-200/50 shadow-sm">
+      <div className="sticky top-0 z-30 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-700/50 shadow-sm">
         <div className="p-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                 Expenses
               </h1>
-              <p className="text-slate-600 text-sm mt-1">Track and analyze your spending patterns</p>
+              <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Track and analyze your spending patterns</p>
             </div>
             
             <div className="flex flex-wrap gap-2">
@@ -251,7 +245,7 @@ export default function ExpensesPage() {
                 <Button variant="outline" disabled={importingStatement} className="rounded-xl border-slate-200" asChild>
                   <span className="cursor-pointer">
                     <Upload className="h-4 w-4 mr-2" />
-                    {importingStatement ? 'Importing...' : 'Import'}
+                    {importingStatement ? 'Importing...' : 'Import CSV'}
                   </span>
                 </Button>
                 <input
@@ -277,21 +271,21 @@ export default function ExpensesPage() {
           {/* Quick Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
             <div className="bg-gradient-to-br from-rose-500/10 to-pink-500/10 border border-rose-200/50 rounded-xl p-4">
-              <p className="text-xs font-medium text-slate-600 mb-1">Total Spent</p>
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Total Spent</p>
               <p className="text-2xl font-bold text-rose-600">{format(displayedTotal)}</p>
             </div>
-            <div className="bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-200/50 rounded-xl p-4">
-              <p className="text-xs font-medium text-slate-600 mb-1">Transactions</p>
+            <div className="bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-200/50 dark:border-blue-700/50 rounded-xl p-4">
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Transactions</p>
               <p className="text-2xl font-bold text-blue-600">{filteredExpenses.length}</p>
             </div>
-            <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border border-emerald-200/50 rounded-xl p-4">
-              <p className="text-xs font-medium text-slate-600 mb-1">Avg/Transaction</p>
+            <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border border-emerald-200/50 dark:border-emerald-700/50 rounded-xl p-4">
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Avg/Transaction</p>
               <p className="text-2xl font-bold text-emerald-600">
                 {filteredExpenses.length > 0 ? format(displayedTotal / filteredExpenses.length) : format(0)}
               </p>
             </div>
-            <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-200/50 rounded-xl p-4">
-              <p className="text-xs font-medium text-slate-600 mb-1">Categories</p>
+            <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-200/50 dark:border-amber-700/50 rounded-xl p-4">
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Categories</p>
               <p className="text-2xl font-bold text-amber-600">{categories.length}</p>
             </div>
           </div>
@@ -336,7 +330,7 @@ export default function ExpensesPage() {
               "sticky top-24 transition-transform duration-500",
               sidebarCollapsed && "translate-x-[-100%]"
             )}>
-              <Card className="border-none shadow-2xl bg-white/90 backdrop-blur-xl rounded-3xl overflow-hidden">
+              <Card className="border-none shadow-2xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl rounded-3xl overflow-hidden">
                 <CardHeader className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white pb-6">
                   <div className="flex items-center justify-between mb-4">
                     <Button 
@@ -370,7 +364,7 @@ export default function ExpensesPage() {
                 <CardContent className="p-6">
                   {/* Category Filter */}
                   <div className="mb-6">
-                    <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-3 block">
+                    <Label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-3 block">
                       Filter by Category
                     </Label>
                     <div className="flex flex-wrap gap-2">
@@ -380,7 +374,7 @@ export default function ExpensesPage() {
                           "cursor-pointer rounded-xl px-3 py-1.5 transition-all",
                           !selectedCategory 
                             ? "bg-indigo-600 text-white hover:bg-indigo-700" 
-                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
                         )}
                       >
                         All
@@ -393,7 +387,7 @@ export default function ExpensesPage() {
                             "cursor-pointer rounded-xl px-3 py-1.5 transition-all",
                             selectedCategory === cat.id
                               ? "bg-indigo-600 text-white hover:bg-indigo-700"
-                              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                              : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
                           )}
                         >
                           {cat.name}
@@ -404,7 +398,7 @@ export default function ExpensesPage() {
 
                   {/* Mini Calendar */}
                   <div>
-                    <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-3 block">
+                    <Label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-3 block">
                       Quick Date Select
                     </Label>
                     <div className="grid grid-cols-7 gap-1 text-center text-xs">
@@ -450,7 +444,7 @@ export default function ExpensesPage() {
                                 isSelected && "bg-indigo-600 text-white font-bold shadow-lg",
                                 !isSelected && isToday && "bg-indigo-100 text-indigo-600 font-semibold",
                                 !isSelected && !isToday && hasExpenses && "bg-rose-50 text-rose-600 font-medium",
-                                !isSelected && !isToday && !hasExpenses && "text-slate-400 hover:bg-slate-50"
+                                !isSelected && !isToday && !hasExpenses && "text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
                               )}
                             >
                               {day}
@@ -509,13 +503,13 @@ export default function ExpensesPage() {
                 return (
                   <div key={date} className="space-y-3">
                     {/* Date Header */}
-                    <div className="flex items-center justify-between sticky top-20 z-20 bg-white/80 backdrop-blur-xl rounded-2xl px-6 py-3 border border-slate-200/50 shadow-sm">
+                    <div className="flex items-center justify-between sticky top-20 z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl px-6 py-3 border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
                       <div className="flex items-center gap-3">
                         <div className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-xl p-2">
                           <Calendar className="h-4 w-4" />
                         </div>
                         <div>
-                          <h3 className="font-bold text-slate-900">
+                          <h3 className="font-bold text-slate-900 dark:text-white">
                             {dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                           </h3>
                           <p className="text-xs text-slate-500">{dayExpenses.length} transactions</p>
@@ -530,26 +524,25 @@ export default function ExpensesPage() {
                     {/* Expense Cards */}
                     <div className="space-y-3">
                       {dayExpenses.map((expense) => {
-                        const Icon = iconMap[expense.category_icon || 'default'] || iconMap.default
+                        const Icon = getCategoryIcon(expense.category_icon || undefined)
 
                         return (
                           <Card
                             key={expense.id}
-                            className="group border-none shadow-lg hover:shadow-2xl transition-all duration-300 hover:scale-[1.02] bg-white rounded-2xl overflow-hidden"
+                            className="group border-none shadow-lg hover:shadow-2xl transition-all duration-300 bg-white dark:bg-slate-900 rounded-2xl overflow-hidden"
                           >
                             <CardContent className="p-0">
                               <div className="flex items-center gap-4 p-5">
                                 {/* Category Icon */}
                                 <div
-                                  className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center shadow-lg"
-                                  style={{ backgroundColor: expense.category_color || '#64748b' }}
+                                  className={cn("flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center shadow-lg text-white", getCategoryColor(expense.category_color || undefined))}
                                 >
                                   <Icon className="h-6 w-6 text-white" />
                                 </div>
 
                                 {/* Expense Details */}
                                 <div className="flex-1 min-w-0">
-                                  <h4 className="font-semibold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">
+                                  <h4 className="font-semibold text-slate-900 dark:text-white truncate group-hover:text-indigo-600 transition-colors">
                                     {expense.description}
                                   </h4>
                                   <div className="flex items-center gap-3 mt-1">
@@ -570,20 +563,20 @@ export default function ExpensesPage() {
                                 </div>
 
                                 {/* Actions */}
-                                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="flex gap-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                                   <Button
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => handleEdit(expense)}
-                                    className="rounded-xl hover:bg-indigo-50 hover:text-indigo-600"
+                                    className="rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-950 hover:text-indigo-600"
                                   >
                                     <Edit className="h-4 w-4" />
                                   </Button>
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => handleDelete(expense.id!)}
-                                    className="rounded-xl hover:bg-rose-50 hover:text-rose-600"
+                                    onClick={() => setDeleteTarget(expense.id!)}
+                                    className="rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950 hover:text-rose-600"
                                   >
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
@@ -598,14 +591,38 @@ export default function ExpensesPage() {
                 )
               })}
           </div>
+
+          {/* Load More */}
+          {hasMore && (
+            <div className="flex justify-center pt-6">
+              <Button
+                variant="outline"
+                onClick={() => setVisibleCount(prev => prev + 50)}
+                className="rounded-xl px-8"
+              >
+                Load More ({allFilteredExpenses.length - visibleCount} remaining)
+              </Button>
+            </div>
+          )}
         </div>
       )}
+
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Delete Expense"
+        description="Are you sure you want to delete this expense? This action cannot be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => deleteTarget && handleDelete(deleteTarget)}
+      />
 
       {/* Add Expense Modal - Centered */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-300 p-4">
-          <Card className="w-full max-w-2xl rounded-3xl border-none shadow-2xl animate-in zoom-in-95 duration-300">
-            <CardHeader className="border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-purple-50">
+          <Card className="w-full max-w-2xl rounded-3xl border-none shadow-2xl animate-in zoom-in-95 duration-300 dark:bg-slate-900">
+            <CardHeader className="border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-slate-800 dark:to-slate-800">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                   {editingExpense ? 'Edit Expense' : 'Add New Expense'}
@@ -622,13 +639,22 @@ export default function ExpensesPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Amount *</Label>
-                  <Input
-                    type="number"
-                    value={formData.amount || ''}
-                    onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) })}
-                    placeholder="0.00"
-                    className="rounded-xl"
-                  />
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium">{symbol}</span>
+                    <Input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={formData.amount || ''}
+                      onChange={(e) => {
+                        setFormData({ ...formData, amount: parseFloat(e.target.value) })
+                        if (formErrors.amount) setFormErrors(prev => { const n = {...prev}; delete n.amount; return n })
+                      }}
+                      placeholder="0.00"
+                      className={cn("rounded-xl pl-8", formErrors.amount && "border-red-500 focus:ring-red-500")}
+                    />
+                  </div>
+                  {formErrors.amount && <p className="text-xs text-red-500">{formErrors.amount}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label>Date *</Label>
@@ -636,8 +662,9 @@ export default function ExpensesPage() {
                     type="date"
                     value={formData.transaction_date}
                     onChange={(e) => setFormData({ ...formData, transaction_date: e.target.value })}
-                    className="rounded-xl"
+                    className={cn("rounded-xl", formErrors.transaction_date && "border-red-500")}
                   />
+                  {formErrors.transaction_date && <p className="text-xs text-red-500">{formErrors.transaction_date}</p>}
                 </div>
               </div>
 
@@ -645,43 +672,59 @@ export default function ExpensesPage() {
                 <Label>Description *</Label>
                 <Input
                   value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, description: e.target.value })
+                    if (formErrors.description) setFormErrors(prev => { const n = {...prev}; delete n.description; return n })
+                  }}
                   placeholder="What did you spend on?"
-                  className="rounded-xl"
+                  className={cn("rounded-xl", formErrors.description && "border-red-500 focus:ring-red-500")}
                 />
+                {formErrors.description && <p className="text-xs text-red-500">{formErrors.description}</p>}
               </div>
 
               <div className="space-y-2">
                 <Label>Category</Label>
-                <select
-                  value={formData.category_id}
-                  onChange={(e) =>
-                    setFormData({ ...formData, category_id: e.target.value || '' })
-                  }
-                  className="w-full p-2 border rounded-xl"
+                <Select
+                  value={formData.category_id || '_none'}
+                  onValueChange={(val) => setFormData({ ...formData, category_id: val === '_none' ? '' : val })}
                 >
-                  <option value="">Uncategorized</option>
-                  {categoriesMaster.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Uncategorized</SelectItem>
+                    {categoriesMaster.map((cat) => {
+                      const Icon = getCategoryIcon(cat.icon)
+                      return (
+                        <SelectItem key={cat.id} value={cat.id}>
+                          <div className="flex items-center gap-2">
+                            <Icon className="h-4 w-4" />
+                            {cat.name}
+                          </div>
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
                 <Label>Payment Method</Label>
-                <select
+                <Select
                   value={formData.payment_method}
-                  onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-                  className="w-full p-2 border rounded-xl"
+                  onValueChange={(val) => setFormData({ ...formData, payment_method: val })}
                 >
-                  <option value="UPI">UPI</option>
-                  <option value="Credit Card">Credit Card</option>
-                  <option value="Debit Card">Debit Card</option>
-                  <option value="Cash">Cash</option>
-                  <option value="Net Banking">Net Banking</option>
-                </select>
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="UPI">UPI</SelectItem>
+                    <SelectItem value="Credit Card">Credit Card</SelectItem>
+                    <SelectItem value="Debit Card">Debit Card</SelectItem>
+                    <SelectItem value="Cash">Cash</SelectItem>
+                    <SelectItem value="Net Banking">Net Banking</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="flex gap-3 pt-4">
