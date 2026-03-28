@@ -10,4 +10,5 @@ export interface ExpenseResponse {
   category_name?: string | null
   category_color?: string | null
   category_icon?: string | null
+  tags?: string[]
 }

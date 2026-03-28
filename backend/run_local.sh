@@ -3,8 +3,8 @@
 # Infrastructure (Postgres, Redis, MinIO, RabbitMQ, Nginx) should be running in Docker
 
 export PYTHONPATH="$(pwd):$PYTHONPATH"
-export DATABASE_URL="postgresql+asyncpg://finance_user:finance_password@localhost:5432/finance_db"
-export REDIS_URL="redis://:redis_password@localhost:6379/0"
+export DATABASE_URL="postgresql+asyncpg://finance_user:finance_password@localhost:5435/finance_db"
+export REDIS_URL="redis://:redis_password@localhost:6399/0"
 export SECRET_KEY="your-secret-key-change-in-production"
 export JWT_ALGORITHM="HS256"
 export JWT_EXPIRATION_MINUTES="1440"

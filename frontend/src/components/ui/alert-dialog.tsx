@@ -4,6 +4,7 @@ import * as React from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { Loader2 } from "lucide-react"
 
 interface ConfirmDialogProps {
   open: boolean
@@ -13,6 +14,7 @@ interface ConfirmDialogProps {
   confirmLabel?: string
   cancelLabel?: string
   variant?: 'destructive' | 'default'
+  loading?: boolean
   onConfirm: () => void
 }
 
@@ -24,18 +26,21 @@ export function ConfirmDialog({
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   variant = "default",
+  loading,
   onConfirm,
 }: ConfirmDialogProps) {
+  const managesLoading = loading !== undefined
+
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-        <DialogPrimitive.Content className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-md translate-x-[-50%] translate-y-[-50%] gap-4 border bg-white p-6 shadow-2xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 rounded-2xl">
+        <DialogPrimitive.Content className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-md translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-2xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 rounded-2xl">
           <div className="flex flex-col space-y-2">
-            <DialogPrimitive.Title className="text-lg font-semibold text-slate-900">
+            <DialogPrimitive.Title className="text-lg font-semibold text-slate-900 dark:text-white">
               {title}
             </DialogPrimitive.Title>
-            <DialogPrimitive.Description className="text-sm text-slate-500">
+            <DialogPrimitive.Description className="text-sm text-slate-500 dark:text-slate-400">
               {description}
             </DialogPrimitive.Description>
           </div>
@@ -43,6 +48,7 @@ export function ConfirmDialog({
             <Button
               variant="outline"
               onClick={() => onOpenChange(false)}
+              disabled={loading}
               className="rounded-xl"
             >
               {cancelLabel}
@@ -50,13 +56,15 @@ export function ConfirmDialog({
             <Button
               onClick={() => {
                 onConfirm()
-                onOpenChange(false)
+                if (!managesLoading) onOpenChange(false)
               }}
+              disabled={loading}
               className={cn(
                 "rounded-xl",
                 variant === 'destructive' && "bg-red-600 hover:bg-red-700 text-white"
               )}
             >
+              {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {confirmLabel}
             </Button>
           </div>

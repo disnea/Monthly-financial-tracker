@@ -1,15 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { 
-  Plus, Wallet, Calendar, TrendingUp, DollarSign, Trash2, Edit, Upload, 
-  Search, Filter, ChevronLeft, ChevronRight, Receipt, ShoppingBag, 
-  Utensils, Car, Home, Heart, Film, ChevronDown, X, Eye, Sparkles
+  Plus, Wallet, Calendar, Trash2, Edit, Upload, 
+  Search, Filter, ChevronLeft, ChevronRight, X, Sparkles,
+  AlertCircle, RefreshCw, Loader2,
+  Smartphone, CreditCard, Banknote, Globe
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { expenseApi, aiApi, Expense, Category, categoryApi, financeApiClient } from '@/lib/api'
@@ -20,48 +21,223 @@ import { getErrorMessage } from '@/lib/error-utils'
 import { getCategoryIcon } from '@/lib/category-icons'
 import { getCategoryColor } from '@/lib/category-colors'
 import { ConfirmDialog } from '@/components/ui/alert-dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
-// Icon mapping from backend icon string → Lucide component
-const iconMap: Record<string, any> = {
-  wallet: Wallet,
-  shopping: ShoppingBag,
-  food: Utensils,
-  transport: Car,
-  utilities: Home,
-  healthcare: Heart,
-  entertainment: Film,
-  default: Receipt,
+// ─── Constants ──────────────────────────────────────────────────────
+const MAX_CSV_FILE_SIZE = 5 * 1024 * 1024
+
+type SortOption = 'newest' | 'oldest' | 'highest' | 'lowest'
+
+const PAYMENT_METHOD_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  'UPI': Smartphone,
+  'Credit Card': CreditCard,
+  'Debit Card': CreditCard,
+  'Cash': Banknote,
+  'Net Banking': Globe,
 }
 
-const categoryColors: Record<string, string> = {
-  'Food & Dining': 'bg-orange-500',
-  'Transportation': 'bg-blue-500',
-  'Shopping': 'bg-purple-500',
-  'Utilities': 'bg-green-500',
-  'Healthcare': 'bg-red-500',
-  'Entertainment': 'bg-pink-500',
-  'default': 'bg-gray-500'
+// ─── SidebarFilters (extracted to avoid re-creation every render) ──
+interface SidebarFiltersProps {
+  currentMonth: Date
+  onMonthChange: (date: Date) => void
+  selectedDate: string | null
+  onDateChange: (date: string | null) => void
+  selectedCategory: string | null
+  onCategoryChange: (cat: string | null) => void
+  categoriesMaster: Category[]
+  calendarExpensesByDate: Record<number, Expense[]>
+  monthlyTotal: number
+  format: (n: number) => string
 }
 
+const SidebarFilters = memo(function SidebarFilters({
+  currentMonth,
+  onMonthChange,
+  selectedDate,
+  onDateChange,
+  selectedCategory,
+  onCategoryChange,
+  categoriesMaster,
+  calendarExpensesByDate,
+  monthlyTotal,
+  format,
+}: SidebarFiltersProps) {
+  const year = currentMonth.getFullYear()
+  const month = currentMonth.getMonth()
+  const firstDay = new Date(year, month, 1).getDay()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const today = new Date()
+  const isCurrentMonth = today.getMonth() === month && today.getFullYear() === year
+
+  return (
+    <Card className="border-none shadow-2xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl rounded-3xl overflow-hidden">
+      <CardHeader className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white pb-6">
+        <div className="flex items-center justify-between mb-4">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => onMonthChange(new Date(year, month - 1))}
+            className="text-white hover:bg-white/20 rounded-xl"
+            aria-label="Previous month"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="text-center">
+            <CardTitle className="text-lg font-bold">
+              {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </CardTitle>
+            {!isCurrentMonth && (
+              <button
+                onClick={() => onMonthChange(new Date())}
+                className="text-[11px] text-white/70 hover:text-white underline mt-1 transition-colors"
+              >
+                Jump to today
+              </button>
+            )}
+          </div>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => onMonthChange(new Date(year, month + 1))}
+            className="text-white hover:bg-white/20 rounded-xl"
+            aria-label="Next month"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+        
+        <div className="text-center">
+          <p className="text-white/80 text-xs mb-1">Total This Month</p>
+          <p className="text-3xl font-bold tabular-nums">{format(monthlyTotal)}</p>
+        </div>
+      </CardHeader>
+      
+      <CardContent className="p-6">
+        {/* Category Filter */}
+        <div className="mb-6">
+          <Label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-3 block">
+            Filter by Category
+          </Label>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Category filters">
+            <button
+              type="button"
+              onClick={() => onCategoryChange(null)}
+              className={cn(
+                "inline-flex items-center rounded-xl px-3 py-1.5 text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2",
+                !selectedCategory 
+                  ? "bg-indigo-600 text-white hover:bg-indigo-700" 
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+              )}
+            >
+              All
+            </button>
+            {categoriesMaster.map(cat => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => onCategoryChange(cat.id)}
+                className={cn(
+                  "inline-flex items-center rounded-xl px-3 py-1.5 text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2",
+                  selectedCategory === cat.id
+                    ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                )}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Mini Calendar */}
+        <div>
+          <Label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-3 block">
+            Quick Date Select
+          </Label>
+          <div className="grid grid-cols-7 gap-1 text-center text-xs" role="grid" aria-label="Calendar">
+            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
+              <div key={i} className="font-semibold text-slate-400 p-2" role="columnheader">{day}</div>
+            ))}
+            {(() => {
+              const days = []
+              for (let i = 0; i < firstDay; i++) {
+                days.push(<div key={`empty-${i}`} className="p-2"></div>)
+              }
+              for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                const isToday = today.getDate() === day && today.getMonth() === month && today.getFullYear() === year
+                const isSelected = selectedDate === dateStr
+                const dayExpenses = calendarExpensesByDate[day]
+                const dayTotal = dayExpenses?.reduce((sum, e) => sum + e.amount, 0) || 0
+
+                days.push(
+                  <button
+                    key={day}
+                    onClick={() => onDateChange(isSelected ? null : dateStr)}
+                    aria-label={`${new Date(year, month, day).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}${dayExpenses ? `, ${dayExpenses.length} expense${dayExpenses.length > 1 ? 's' : ''}, ${format(dayTotal)}` : ''}`}
+                    aria-pressed={isSelected}
+                    className={cn(
+                      "relative p-2 rounded-xl transition-all hover:scale-105",
+                      isSelected && "bg-indigo-600 text-white font-bold shadow-lg",
+                      !isSelected && isToday && "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 font-semibold",
+                      !isSelected && !isToday && dayExpenses && "bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 font-medium",
+                      !isSelected && !isToday && !dayExpenses && "text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                    )}
+                  >
+                    {day}
+                    {dayExpenses && (
+                      <div className={cn(
+                        "absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full",
+                        isSelected ? "bg-white" : "bg-rose-500"
+                      )} />
+                    )}
+                  </button>
+                )
+              }
+              return days
+            })()}
+          </div>
+        </div>
+
+        {/* Clear Filters */}
+        {(selectedDate || selectedCategory) && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              onDateChange(null)
+              onCategoryChange(null)
+            }}
+            className="w-full mt-6 rounded-xl border-slate-200 dark:border-slate-700"
+          >
+            <X className="h-4 w-4 mr-2" />
+            Clear Filters
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  )
+})
+
+// ─── Main Page ──────────────────────────────────────────────────────
 export default function ExpensesPage() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated())
   const token = useAuthStore((state) => state.token)
   const { currency, symbol, format } = useCurrency()
+
+  // Core data
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [importingStatement, setImportingStatement] = useState(false)
-  const [selectedDate, setSelectedDate] = useState<string | null>(null)
-  const [currentMonth, setCurrentMonth] = useState(new Date())
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [fetchError, setFetchError] = useState(false)
   const [categoriesMaster, setCategoriesMaster] = useState<Category[]>([])
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
+  // Form state
+  const [showForm, setShowForm] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
-  const [visibleCount, setVisibleCount] = useState(50)
   const [formData, setFormData] = useState({
     amount: 0,
     currency: currency,
@@ -72,10 +248,83 @@ export default function ExpensesPage() {
     tags: [] as string[]
   })
   const [tagInput, setTagInput] = useState('')
+  const [initialFormData, setInitialFormData] = useState(formData)
 
-  // AI auto-categorization state
+  // Filter & display state
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [currentMonth, setCurrentMonth] = useState(new Date())
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [sortOption, setSortOption] = useState<SortOption>('newest')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(50)
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
+
+  // Delete state
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  // Discard warning
+  const [showDiscardWarning, setShowDiscardWarning] = useState(false)
+
+  // Import state
+  const [importingStatement, setImportingStatement] = useState(false)
+
+  // AI auto-categorization
   const [aiSuggestion, setAiSuggestion] = useState<{ category_name: string | null; category_id: string | null; confidence: number } | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
+
+  // Refs
+  const amountInputRef = useRef<HTMLInputElement>(null)
+
+  // ─── Derived helpers ────────────────────────────────────────────
+  const getDefaultFormData = useCallback(() => ({
+    amount: 0,
+    currency: currency,
+    description: '',
+    transaction_date: new Date().toISOString().split('T')[0],
+    payment_method: 'UPI',
+    category_id: '',
+    tags: [] as string[]
+  }), [currency])
+
+  const resetForm = useCallback(() => {
+    setShowForm(false)
+    setEditingExpense(null)
+    setFormData(getDefaultFormData())
+    setTagInput('')
+    setFormErrors({})
+    setAiSuggestion(null)
+    setSubmitting(false)
+  }, [getDefaultFormData])
+
+  const isFormDirty = useMemo(() => {
+    return (
+      formData.amount !== initialFormData.amount ||
+      formData.description !== initialFormData.description ||
+      formData.transaction_date !== initialFormData.transaction_date ||
+      formData.payment_method !== initialFormData.payment_method ||
+      formData.category_id !== initialFormData.category_id ||
+      JSON.stringify(formData.tags) !== JSON.stringify(initialFormData.tags)
+    )
+  }, [formData, initialFormData])
+
+  const isDateSort = sortOption === 'newest' || sortOption === 'oldest'
+
+  // ─── Data fetching ────────────────────────────────────────────
+  const fetchExpenses = useCallback(async () => {
+    try {
+      setFetchError(false)
+      const response = await expenseApi.list()
+      setExpenses(response || [])
+    } catch (error: unknown) {
+      setExpenses([])
+      setFetchError(true)
+      toast.error(getErrorMessage(error) || 'Failed to load expenses. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     if (isAuthenticated && token) {
@@ -84,7 +333,7 @@ export default function ExpensesPage() {
       setExpenses([])
       setLoading(false)
     }
-  }, [isAuthenticated, token])
+  }, [isAuthenticated, token, fetchExpenses])
 
   useEffect(() => {
     if (!isAuthenticated || !token) return
@@ -92,20 +341,19 @@ export default function ExpensesPage() {
       try {
         const cats = await categoryApi.list()
         setCategoriesMaster(cats)
-      } catch (e) {
-        console.error('Failed to load categories', e)
+      } catch (e: unknown) {
+        toast.error('Failed to load categories. Some features may be limited.')
       }
     }
     load()
   }, [isAuthenticated, token])
 
-  // Debounced AI categorization when description changes
+  // Debounced AI categorization
   useEffect(() => {
     if (!showForm || !formData.description || formData.description.length < 3) {
       setAiSuggestion(null)
       return
     }
-    // Don't suggest if user already picked a category
     if (formData.category_id) return
 
     const timer = setTimeout(async () => {
@@ -124,37 +372,123 @@ export default function ExpensesPage() {
       }
     }, 500)
     return () => clearTimeout(timer)
-  }, [formData.description, showForm])
+  }, [formData.description, formData.amount, formData.category_id, showForm])
 
-  const fetchExpenses = async () => {
-    try {
-      const response = await expenseApi.list()
-      setExpenses(response || [])
-    } catch (error: any) {
-      setExpenses([])
-    } finally {
-      setLoading(false)
+  // Auto-focus amount field when form opens
+  useEffect(() => {
+    if (showForm) {
+      const timer = setTimeout(() => amountInputRef.current?.focus(), 100)
+      return () => clearTimeout(timer)
     }
-  }
+  }, [showForm])
 
+  // ─── Memoized data ───────────────────────────────────────────
+  const allFilteredExpenses = useMemo(() => expenses.filter(expense => {
+    const query = searchQuery.toLowerCase()
+    const matchesSearch = !query || (
+      (expense.description?.toLowerCase().includes(query) ?? false) ||
+      (expense.tags?.some(t => t.toLowerCase().includes(query)) ?? false)
+    )
+    const matchesCategory = !selectedCategory || expense.category_id === selectedCategory
+    const matchesDate = !selectedDate || expense.transaction_date.split('T')[0] === selectedDate
+    return matchesSearch && matchesCategory && matchesDate
+  }), [expenses, searchQuery, selectedCategory, selectedDate])
+
+  const sortedFilteredExpenses = useMemo(() => {
+    const list = [...allFilteredExpenses]
+    switch (sortOption) {
+      case 'newest':
+        return list.sort((a, b) => new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime())
+      case 'oldest':
+        return list.sort((a, b) => new Date(a.transaction_date).getTime() - new Date(b.transaction_date).getTime())
+      case 'highest':
+        return list.sort((a, b) => b.amount - a.amount)
+      case 'lowest':
+        return list.sort((a, b) => a.amount - b.amount)
+      default:
+        return list
+    }
+  }, [allFilteredExpenses, sortOption])
+
+  const paginatedExpenses = useMemo(() => sortedFilteredExpenses.slice(0, visibleCount), [sortedFilteredExpenses, visibleCount])
+  const hasMore = sortedFilteredExpenses.length > visibleCount
+
+  const groupedExpenses = useMemo(() => {
+    if (!isDateSort) return null
+    return paginatedExpenses.reduce((acc, expense) => {
+      const date = expense.transaction_date.split('T')[0]
+      if (!acc[date]) acc[date] = []
+      acc[date].push(expense)
+      return acc
+    }, {} as Record<string, Expense[]>)
+  }, [paginatedExpenses, isDateSort])
+
+  const displayedTotal = useMemo(() => paginatedExpenses.reduce((sum, expense) => sum + expense.amount, 0), [paginatedExpenses])
+  const categories = useMemo(() => Array.from(new Set(expenses.map(e => e.category_name).filter(Boolean))), [expenses])
+
+  const monthlyTotal = useMemo(() => {
+    const year = currentMonth.getFullYear()
+    const month = currentMonth.getMonth()
+    return expenses
+      .filter(expense => {
+        const [expYear, expMonth] = expense.transaction_date.split('T')[0].split('-').map(Number)
+        return expYear === year && expMonth - 1 === month
+      })
+      .reduce((sum, expense) => sum + expense.amount, 0)
+  }, [expenses, currentMonth])
+
+  const calendarExpensesByDate = useMemo(() => {
+    const year = currentMonth.getFullYear()
+    const month = currentMonth.getMonth()
+    return expenses.reduce((acc: Record<number, Expense[]>, expense) => {
+      const [expYear, expMonth, expDay] = expense.transaction_date.split('T')[0].split('-').map(Number)
+      if (expMonth - 1 === month && expYear === year) {
+        if (!acc[expDay]) acc[expDay] = []
+        acc[expDay].push(expense)
+      }
+      return acc
+    }, {})
+  }, [expenses, currentMonth])
+
+  const hasActiveFilters = !!(selectedDate || selectedCategory || searchQuery)
+
+  // ─── Handlers ─────────────────────────────────────────────────
   const handleEdit = (expense: Expense) => {
-    setEditingExpense(expense)
-    setFormData({
+    const editData = {
       amount: expense.amount,
       currency: expense.currency,
       description: expense.description || '',
-      transaction_date: expense.transaction_date, // it's already "YYYY-MM-DD"
+      transaction_date: expense.transaction_date.split('T')[0],
       payment_method: expense.payment_method || 'UPI',
       category_id: expense.category_id || '',
-      tags: (expense as any).tags || []
-    })
+      tags: expense.tags || []
+    }
+    setEditingExpense(expense)
+    setFormData(editData)
+    setInitialFormData(editData)
+    setTagInput('')
+    setFormErrors({})
+    setShowForm(true)
+  }
+
+  const openAddForm = () => {
+    const defaults = getDefaultFormData()
+    setFormData(defaults)
+    setInitialFormData(defaults)
+    setEditingExpense(null)
+    setFormErrors({})
     setTagInput('')
     setShowForm(true)
   }
 
   const handleSubmit = async () => {
+    if (submitting) return
+
     const errors: Record<string, string> = {}
-    if (!formData.amount || formData.amount <= 0) errors.amount = 'Amount must be greater than zero'
+    const amount = Number(formData.amount)
+    if (isNaN(amount) || amount <= 0) {
+      errors.amount = !formData.amount ? 'Amount is required' : 'Amount must be greater than zero'
+    }
     if (!formData.description?.trim()) errors.description = 'Description is required'
     if (!formData.transaction_date) errors.transaction_date = 'Date is required'
     
@@ -163,6 +497,7 @@ export default function ExpensesPage() {
       return
     }
     setFormErrors({})
+    setSubmitting(true)
 
     try {
       if (editingExpense && editingExpense.id) {
@@ -172,32 +507,25 @@ export default function ExpensesPage() {
         await expenseApi.create(formData)
         toast.success('Expense added successfully!')
       }
-      setShowForm(false)
-      setEditingExpense(null)
-      setFormData({
-        amount: 0,
-        currency: currency,
-        description: '',
-        transaction_date: new Date().toISOString().split('T')[0],
-        payment_method: 'UPI',
-        category_id: '',
-        tags: []
-      })
-      setTagInput('')
+      resetForm()
       fetchExpenses()
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error(getErrorMessage(error) || `Failed to ${editingExpense ? 'update' : 'add'} expense`)
+    } finally {
+      setSubmitting(false)
     }
   }
 
   const handleDelete = async (id: string) => {
+    setDeleting(true)
     try {
       await expenseApi.delete(id)
       toast.success('Expense deleted successfully!')
       fetchExpenses()
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error(getErrorMessage(error) || 'Failed to delete expense')
     } finally {
+      setDeleting(false)
       setDeleteTarget(null)
     }
   }
@@ -210,6 +538,10 @@ export default function ExpensesPage() {
       toast.error('Please upload a CSV file')
       return
     }
+    if (file.size > MAX_CSV_FILE_SIZE) {
+      toast.error('File too large. Maximum size is 5MB.')
+      return
+    }
 
     const formDataUpload = new FormData()
     formDataUpload.append('file', file)
@@ -220,10 +552,9 @@ export default function ExpensesPage() {
       const response = await financeApiClient.post('/import/bank-statement', formDataUpload, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
-      
       toast.success(`Successfully imported ${response.data.imported_count} transactions!`)
       fetchExpenses()
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error(getErrorMessage(error) || 'Failed to import bank statement')
     } finally {
       setImportingStatement(false)
@@ -231,488 +562,598 @@ export default function ExpensesPage() {
     }
   }
 
-  // Filter expenses
-  const allFilteredExpenses = expenses.filter(expense => {
-    const matchesSearch = expense.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? true
-    const matchesCategory = !selectedCategory || expense.category_id === selectedCategory
-    const matchesDate = !selectedDate || expense.transaction_date.split('T')[0] === selectedDate
-    return matchesSearch && matchesCategory && matchesDate
-  })
-  const filteredExpenses = allFilteredExpenses.slice(0, visibleCount)
-  const hasMore = allFilteredExpenses.length > visibleCount
+  const handleFormOpenChange = (open: boolean) => {
+    if (!open) {
+      if (submitting) return
+      if (isFormDirty) {
+        setShowDiscardWarning(true)
+        return
+      }
+      resetForm()
+    }
+  }
 
-  // Group by date
-  const groupedExpenses = filteredExpenses.reduce((acc, expense) => {
-    const date = expense.transaction_date.split('T')[0]
-    if (!acc[date]) acc[date] = []
-    acc[date].push(expense)
-    return acc
-  }, {} as Record<string, Expense[]>)
+  // ─── Shared expense card renderer ─────────────────────────────
+  const renderExpenseCard = (expense: Expense, showDate: boolean) => {
+    const Icon = getCategoryIcon(expense.category_icon || undefined)
+    const PaymentIcon = PAYMENT_METHOD_ICONS[expense.payment_method || '']
 
-  const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0)
-  const displayedTotal = filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0)
-  const categories = Array.from(new Set(expenses.map(e => e.category_name).filter(Boolean)))
-
-  return (
-    <div className="relative min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/20 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
-      {/* Enhanced Header with Search */}
-      <div className="sticky top-0 z-30 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-700/50 shadow-sm">
-        <div className="p-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                Expenses
-              </h1>
-              <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Track and analyze your spending patterns</p>
+    return (
+      <Card
+        key={expense.id}
+        className="group border-none shadow-lg hover:shadow-2xl transition-all duration-300 bg-white dark:bg-slate-900 rounded-2xl overflow-hidden"
+      >
+        <CardContent className="p-0">
+          <div className="flex items-center gap-3 md:gap-4 p-4 md:p-5">
+            {/* Category Icon */}
+            <div
+              className={cn("flex-shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center shadow-lg text-white", getCategoryColor(expense.category_color || undefined))}
+            >
+              <Icon className="h-5 w-5 md:h-6 md:w-6 text-white" />
             </div>
-            
-            <div className="flex flex-wrap gap-2">
-              {/* Search Bar */}
-              <div className="relative flex-1 min-w-[200px]">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="Search expenses..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 rounded-xl border-slate-200 focus:border-indigo-500"
-                />
-              </div>
 
-              <label htmlFor="statement-upload">
-                <Button variant="outline" disabled={importingStatement} className="rounded-xl border-slate-200" asChild>
-                  <span className="cursor-pointer">
-                    <Upload className="h-4 w-4 mr-2" />
-                    {importingStatement ? 'Importing...' : 'Import CSV'}
+            {/* Expense Details */}
+            <div className="flex-1 min-w-0">
+              <Tooltip delayDuration={300}>
+                <TooltipTrigger asChild>
+                  <h4 className="font-semibold text-slate-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors text-sm md:text-base cursor-default">
+                    {expense.description}
+                  </h4>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs">
+                  <p>{expense.description}</p>
+                </TooltipContent>
+              </Tooltip>
+              <div className="flex items-center gap-2 md:gap-3 mt-1 flex-wrap">
+                <Badge variant="secondary" className="text-xs rounded-lg">
+                  {expense.category_name || 'Uncategorized'}
+                </Badge>
+                {PaymentIcon && (
+                  <span className="text-xs text-slate-500 hidden sm:inline-flex items-center gap-1">
+                    <PaymentIcon className="h-3 w-3" />
+                    {expense.payment_method}
                   </span>
-                </Button>
-                <input
-                  id="statement-upload"
-                  type="file"
-                  accept=".csv"
-                  className="hidden"
-                  onChange={handleBankStatementUpload}
-                  disabled={importingStatement}
-                />
-              </label>
-
-              <Button 
-                onClick={() => setShowForm(true)} 
-                className="rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Expense
-              </Button>
-            </div>
-          </div>
-
-          {/* Quick Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-            <div className="bg-gradient-to-br from-rose-500/10 to-pink-500/10 border border-rose-200/50 rounded-xl p-4">
-              <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Total Spent</p>
-              <p className="text-2xl font-bold text-rose-600">{format(displayedTotal)}</p>
-            </div>
-            <div className="bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-200/50 dark:border-blue-700/50 rounded-xl p-4">
-              <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Transactions</p>
-              <p className="text-2xl font-bold text-blue-600">{filteredExpenses.length}</p>
-            </div>
-            <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border border-emerald-200/50 dark:border-emerald-700/50 rounded-xl p-4">
-              <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Avg/Transaction</p>
-              <p className="text-2xl font-bold text-emerald-600">
-                {filteredExpenses.length > 0 ? format(displayedTotal / filteredExpenses.length) : format(0)}
-              </p>
-            </div>
-            <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-200/50 dark:border-amber-700/50 rounded-xl p-4">
-              <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Categories</p>
-              <p className="text-2xl font-bold text-amber-600">{categories.length}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="flex items-center justify-center py-12 px-6">
-          <div className="text-center">
-            <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-slate-600">Loading expenses...</p>
-          </div>
-        </div>
-      ) : expenses.length === 0 ? (
-        <div className="flex items-center justify-center py-12 px-6">
-          <Card className="max-w-md border-none shadow-2xl">
-            <CardContent className="flex flex-col items-center justify-center py-10">
-              <div className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mb-6">
-                <Wallet className="h-10 w-10 text-white" />
+                )}
+                {!PaymentIcon && expense.payment_method && (
+                  <span className="text-xs text-slate-500 hidden sm:inline">
+                    {expense.payment_method}
+                  </span>
+                )}
+                {expense.tags?.map((tag: string, ti: number) => (
+                  <Badge key={ti} variant="outline" className="text-[10px] rounded-md px-1.5 py-0 border-indigo-200 text-indigo-600 dark:border-indigo-800 dark:text-indigo-400 hidden sm:inline-flex">
+                    {tag}
+                  </Badge>
+                ))}
               </div>
-              <h3 className="text-2xl font-bold mb-2">No Expenses Yet</h3>
-              <p className="text-slate-600 text-center mb-6 max-w-sm">
-                Start tracking your spending by adding your first expense or importing from your bank statement
+            </div>
+
+            {/* Amount + optional date */}
+            <div className="text-right flex-shrink-0">
+              <p className="text-lg md:text-xl font-bold text-rose-600 dark:text-rose-400 tabular-nums">
+                {format(expense.amount)}
               </p>
-              <Button onClick={() => setShowForm(true)} className="rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600">
-                <Plus className="h-4 w-4 mr-2" />
-                Add First Expense
+              {showDate && (
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {new Date(expense.transaction_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </p>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-1 md:gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100 transition-opacity">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleEdit(expense)}
+                className="rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-950 hover:text-indigo-600 min-h-[36px] min-w-[36px] md:min-h-[40px] md:min-w-[40px]"
+                aria-label={`Edit expense: ${expense.description}`}
+              >
+                <Edit className="h-4 w-4" />
               </Button>
-            </CardContent>
-          </Card>
-        </div>
-      ) : (
-        <div className="flex gap-4 p-4 md:gap-6 md:p-6">
-          {/* Sliding Sidebar */}
-          <div
-            className={cn(
-              "transition-all duration-500 ease-in-out",
-              sidebarCollapsed ? "w-0 opacity-0" : "w-80 opacity-100"
-            )}
-          >
-            <div className={cn(
-              "sticky top-24 transition-transform duration-500",
-              sidebarCollapsed && "translate-x-[-100%]"
-            )}>
-              <Card className="border-none shadow-2xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl rounded-3xl overflow-hidden">
-                <CardHeader className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white pb-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))}
-                      className="text-white hover:bg-white/20 rounded-xl"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <CardTitle className="text-lg font-bold">
-                      {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                    </CardTitle>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))}
-                      className="text-white hover:bg-white/20 rounded-xl"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  
-                  {/* Total for month */}
-                  <div className="text-center">
-                    <p className="text-white/80 text-xs mb-1">Total This Month</p>
-                    <p className="text-3xl font-bold">{format(totalExpenses)}</p>
-                  </div>
-                </CardHeader>
-                
-                <CardContent className="p-6">
-                  {/* Category Filter */}
-                  <div className="mb-6">
-                    <Label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-3 block">
-                      Filter by Category
-                    </Label>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge
-                        onClick={() => setSelectedCategory(null)}
-                        className={cn(
-                          "cursor-pointer rounded-xl px-3 py-1.5 transition-all",
-                          !selectedCategory 
-                            ? "bg-indigo-600 text-white hover:bg-indigo-700" 
-                            : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDeleteTarget(expense.id!)}
+                className="rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950 hover:text-rose-600 min-h-[36px] min-w-[36px] md:min-h-[40px] md:min-w-[40px]"
+                aria-label={`Delete expense: ${expense.description}`}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // ─── Render ───────────────────────────────────────────────────
+  return (
+    <TooltipProvider>
+      <div className="relative min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/20 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
+        {/* Header */}
+        <div className="sticky top-0 z-30 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-700/50 shadow-sm">
+          <div className="p-4 md:p-6">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                  Expenses
+                </h1>
+                <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Track and analyze your spending patterns</p>
+              </div>
+              
+              <div className="flex flex-wrap gap-2">
+                {/* Search */}
+                <div className="relative flex-1 min-w-[140px] sm:min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    placeholder="Search expenses or tags..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 rounded-xl border-slate-200 dark:border-slate-700 focus:border-indigo-500"
+                    aria-label="Search expenses and tags"
+                  />
+                </div>
+
+                {/* Sort */}
+                <Select value={sortOption} onValueChange={(v) => setSortOption(v as SortOption)}>
+                  <SelectTrigger className="w-[150px] rounded-xl border-slate-200 dark:border-slate-700" aria-label="Sort expenses">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="newest">Newest first</SelectItem>
+                    <SelectItem value="oldest">Oldest first</SelectItem>
+                    <SelectItem value="highest">Highest amount</SelectItem>
+                    <SelectItem value="lowest">Lowest amount</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Mobile filter toggle */}
+                {expenses.length > 0 && (
+                  <Sheet open={mobileFilterOpen} onOpenChange={setMobileFilterOpen}>
+                    <SheetTrigger asChild>
+                      <Button variant="outline" className="rounded-xl border-slate-200 dark:border-slate-700 lg:hidden" aria-label="Open filters">
+                        <Filter className="h-4 w-4 mr-2" />
+                        Filters
+                        {hasActiveFilters && (
+                          <span className="ml-1.5 w-2 h-2 rounded-full bg-indigo-600" />
                         )}
-                      >
-                        All
-                      </Badge>
-                      {categoriesMaster.map(cat => (
-                        <Badge
-                          key={cat.id}
-                          onClick={() => setSelectedCategory(cat.id)}
-                          className={cn(
-                            "cursor-pointer rounded-xl px-3 py-1.5 transition-all",
-                            selectedCategory === cat.id
-                              ? "bg-indigo-600 text-white hover:bg-indigo-700"
-                              : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-                          )}
-                        >
-                          {cat.name}
-                        </Badge>
-                      ))}
+                      </Button>
+                    </SheetTrigger>
+                    <SheetContent side="left" className="w-[340px] p-0 border-0 overflow-y-auto">
+                      <div className="p-4">
+                        <SidebarFilters
+                          currentMonth={currentMonth}
+                          onMonthChange={setCurrentMonth}
+                          selectedDate={selectedDate}
+                          onDateChange={setSelectedDate}
+                          selectedCategory={selectedCategory}
+                          onCategoryChange={setSelectedCategory}
+                          categoriesMaster={categoriesMaster}
+                          calendarExpensesByDate={calendarExpensesByDate}
+                          monthlyTotal={monthlyTotal}
+                          format={format}
+                        />
+                      </div>
+                    </SheetContent>
+                  </Sheet>
+                )}
+
+                <label htmlFor="statement-upload">
+                  <Button variant="outline" disabled={importingStatement} className="rounded-xl border-slate-200 dark:border-slate-700" asChild>
+                    <span className="cursor-pointer">
+                      <Upload className="h-4 w-4 mr-2" />
+                      <span className="hidden sm:inline">{importingStatement ? 'Importing...' : 'Import CSV'}</span>
+                      <span className="sm:hidden">{importingStatement ? '...' : 'CSV'}</span>
+                    </span>
+                  </Button>
+                  <input
+                    id="statement-upload"
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    onChange={handleBankStatementUpload}
+                    disabled={importingStatement}
+                  />
+                </label>
+
+                <Button 
+                  onClick={openAddForm}
+                  className="rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  <span className="hidden sm:inline">Add Expense</span>
+                  <span className="sm:hidden">Add</span>
+                </Button>
+              </div>
+            </div>
+
+            {/* Quick Stats */}
+            {loading ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-4 md:mt-6 animate-pulse">
+                {[1, 2, 3, 4].map(i => (
+                  <div key={i} className="rounded-xl p-3 md:p-4 bg-slate-100 dark:bg-slate-800/50">
+                    <div className="h-3 w-16 rounded bg-slate-200 dark:bg-slate-700 mb-2" />
+                    <div className="h-7 w-20 rounded bg-slate-200 dark:bg-slate-700" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-4 md:mt-6">
+                <div className="bg-gradient-to-br from-rose-500/10 to-pink-500/10 border border-rose-200/50 dark:border-rose-800/50 rounded-xl p-3 md:p-4" aria-label={`Total spent: ${format(displayedTotal)}`}>
+                  <p className="text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
+                    {hasActiveFilters ? 'Filtered Total' : 'Total Spent'}
+                  </p>
+                  <p className="text-xl md:text-2xl font-bold text-rose-600 dark:text-rose-400 tabular-nums">{format(displayedTotal)}</p>
+                </div>
+                <div className="bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-200/50 dark:border-blue-800/50 rounded-xl p-3 md:p-4" aria-label={`${paginatedExpenses.length} transactions`}>
+                  <p className="text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">Transactions</p>
+                  <p className="text-xl md:text-2xl font-bold text-blue-600 dark:text-blue-400 tabular-nums">{paginatedExpenses.length}</p>
+                </div>
+                <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border border-emerald-200/50 dark:border-emerald-800/50 rounded-xl p-3 md:p-4">
+                  <p className="text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">Avg/Transaction</p>
+                  <p className="text-xl md:text-2xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                    {paginatedExpenses.length > 0 ? format(displayedTotal / paginatedExpenses.length) : format(0)}
+                  </p>
+                </div>
+                <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-200/50 dark:border-amber-800/50 rounded-xl p-3 md:p-4">
+                  <p className="text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">Categories</p>
+                  <p className="text-xl md:text-2xl font-bold text-amber-600 dark:text-amber-400 tabular-nums">{categories.length}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ─── Content States ─────────────────────────────────────── */}
+        {loading ? (
+          /* Skeleton loader */
+          <div className="p-4 md:p-6 animate-pulse" role="status" aria-label="Loading expenses">
+            <div className="flex gap-4 md:gap-6">
+              {/* Skeleton sidebar */}
+              <div className="hidden lg:block w-80 flex-shrink-0">
+                <div className="rounded-3xl bg-slate-200/60 dark:bg-slate-800/60 h-[480px]" />
+              </div>
+              {/* Skeleton content */}
+              <div className="flex-1 space-y-4">
+                {/* Skeleton date header */}
+                <div className="flex items-center justify-between rounded-2xl bg-slate-100 dark:bg-slate-800/50 px-4 md:px-6 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-slate-200 dark:bg-slate-700" />
+                    <div className="space-y-1.5">
+                      <div className="h-4 w-36 rounded bg-slate-200 dark:bg-slate-700" />
+                      <div className="h-3 w-20 rounded bg-slate-200 dark:bg-slate-700" />
                     </div>
                   </div>
-
-                  {/* Mini Calendar */}
-                  <div>
-                    <Label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-3 block">
-                      Quick Date Select
-                    </Label>
-                    <div className="grid grid-cols-7 gap-1 text-center text-xs">
-                      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
-                        <div key={i} className="font-semibold text-slate-400 p-2">{day}</div>
-                      ))}
-                      {(() => {
-                        const year = currentMonth.getFullYear()
-                        const month = currentMonth.getMonth()
-                        const firstDay = new Date(year, month, 1).getDay()
-                        const daysInMonth = new Date(year, month + 1, 0).getDate()
-                        const today = new Date()
-                        
-                        const expensesByDate = expenses.reduce((acc: Record<number, typeof expenses>, expense) => {
-                          const [expYear, expMonth, expDay] = expense.transaction_date.split('T')[0].split('-').map(Number)
-                          if (expMonth - 1 === month && expYear === year) {
-                            if (!acc[expDay]) acc[expDay] = []
-                            acc[expDay].push(expense)
-                          }
-                          return acc
-                        }, {})
-
-                        const days = []
-                        // Empty cells for days before month starts
-                        for (let i = 0; i < firstDay; i++) {
-                          days.push(<div key={`empty-${i}`} className="p-2"></div>)
-                        }
-                        
-                        // Days of the month
-                        for (let day = 1; day <= daysInMonth; day++) {
-                          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-                          const isToday = today.getDate() === day && today.getMonth() === month && today.getFullYear() === year
-                          const isSelected = selectedDate === dateStr
-                          const hasExpenses = expensesByDate[day]
-                          const dayTotal = hasExpenses?.reduce((sum, e) => sum + e.amount, 0) || 0
-
-                          days.push(
-                            <button
-                              key={day}
-                              onClick={() => setSelectedDate(isSelected ? null : dateStr)}
-                              className={cn(
-                                "relative p-2 rounded-xl transition-all hover:scale-110",
-                                isSelected && "bg-indigo-600 text-white font-bold shadow-lg",
-                                !isSelected && isToday && "bg-indigo-100 text-indigo-600 font-semibold",
-                                !isSelected && !isToday && hasExpenses && "bg-rose-50 text-rose-600 font-medium",
-                                !isSelected && !isToday && !hasExpenses && "text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
-                              )}
-                            >
-                              {day}
-                              {hasExpenses && (
-                                <div className={cn(
-                                  "absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full",
-                                  isSelected ? "bg-white" : "bg-rose-500"
-                                )} />
-                              )}
-                            </button>
-                          )
-                        }
-                        return days
-                      })()}
+                  <div className="space-y-1.5 text-right">
+                    <div className="h-3 w-16 rounded bg-slate-200 dark:bg-slate-700 ml-auto" />
+                    <div className="h-5 w-24 rounded bg-slate-200 dark:bg-slate-700" />
+                  </div>
+                </div>
+                {/* Skeleton expense cards */}
+                {[1, 2, 3, 4].map(i => (
+                  <div key={i} className="rounded-2xl bg-white dark:bg-slate-900 shadow-lg p-4 md:p-5">
+                    <div className="flex items-center gap-3 md:gap-4">
+                      <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-slate-200 dark:bg-slate-700 flex-shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 rounded bg-slate-200 dark:bg-slate-700" style={{ width: `${50 + i * 8}%` }} />
+                        <div className="h-3 w-1/3 rounded bg-slate-200 dark:bg-slate-700" />
+                      </div>
+                      <div className="h-6 w-20 rounded bg-slate-200 dark:bg-slate-700 flex-shrink-0" />
                     </div>
                   </div>
+                ))}
+                {/* Second date group skeleton */}
+                <div className="flex items-center justify-between rounded-2xl bg-slate-100 dark:bg-slate-800/50 px-4 md:px-6 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-slate-200 dark:bg-slate-700" />
+                    <div className="space-y-1.5">
+                      <div className="h-4 w-28 rounded bg-slate-200 dark:bg-slate-700" />
+                      <div className="h-3 w-16 rounded bg-slate-200 dark:bg-slate-700" />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5 text-right">
+                    <div className="h-3 w-14 rounded bg-slate-200 dark:bg-slate-700 ml-auto" />
+                    <div className="h-5 w-20 rounded bg-slate-200 dark:bg-slate-700" />
+                  </div>
+                </div>
+                {[5, 6].map(i => (
+                  <div key={i} className="rounded-2xl bg-white dark:bg-slate-900 shadow-lg p-4 md:p-5">
+                    <div className="flex items-center gap-3 md:gap-4">
+                      <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-slate-200 dark:bg-slate-700 flex-shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 rounded bg-slate-200 dark:bg-slate-700" style={{ width: `${40 + i * 7}%` }} />
+                        <div className="h-3 w-1/4 rounded bg-slate-200 dark:bg-slate-700" />
+                      </div>
+                      <div className="h-6 w-16 rounded bg-slate-200 dark:bg-slate-700 flex-shrink-0" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <span className="sr-only">Loading expenses...</span>
+          </div>
+        ) : fetchError && expenses.length === 0 ? (
+          /* Error state */
+          <div className="flex items-center justify-center py-12 px-6">
+            <Card className="max-w-md border-none shadow-2xl dark:bg-slate-900">
+              <CardContent className="flex flex-col items-center justify-center py-10">
+                <div className="w-20 h-20 bg-gradient-to-br from-red-500 to-orange-600 rounded-full flex items-center justify-center mb-6">
+                  <AlertCircle className="h-10 w-10 text-white" />
+                </div>
+                <h3 className="text-2xl font-bold mb-2 text-slate-900 dark:text-white">Could Not Load Expenses</h3>
+                <p className="text-slate-600 dark:text-slate-400 text-center mb-6 max-w-sm">
+                  We had trouble connecting to the server. Please check your connection and try again.
+                </p>
+                <Button 
+                  onClick={() => {
+                    setLoading(true)
+                    fetchExpenses()
+                  }} 
+                  className="rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Try Again
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        ) : expenses.length === 0 ? (
+          /* Empty state */
+          <div className="flex items-center justify-center py-12 px-6">
+            <Card className="max-w-md border-none shadow-2xl dark:bg-slate-900">
+              <CardContent className="flex flex-col items-center justify-center py-10">
+                <div className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mb-6">
+                  <Wallet className="h-10 w-10 text-white" />
+                </div>
+                <h3 className="text-2xl font-bold mb-2 text-slate-900 dark:text-white">No Expenses Yet</h3>
+                <p className="text-slate-600 dark:text-slate-400 text-center mb-6 max-w-sm">
+                  Start tracking your spending by adding your first expense or importing from your bank statement
+                </p>
+                <Button onClick={openAddForm} className="rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add First Expense
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        ) : (
+          /* Main content */
+          <div className="flex gap-4 p-4 md:gap-6 md:p-6">
+            {/* Desktop Sidebar */}
+            <div
+              className={cn(
+                "hidden lg:block transition-all duration-300 ease-in-out",
+                sidebarCollapsed ? "w-0 overflow-hidden opacity-0" : "w-80 opacity-100"
+              )}
+            >
+              <div className="sticky top-24">
+                <SidebarFilters
+                  currentMonth={currentMonth}
+                  onMonthChange={setCurrentMonth}
+                  selectedDate={selectedDate}
+                  onDateChange={setSelectedDate}
+                  selectedCategory={selectedCategory}
+                  onCategoryChange={setSelectedCategory}
+                  categoriesMaster={categoriesMaster}
+                  calendarExpensesByDate={calendarExpensesByDate}
+                  monthlyTotal={monthlyTotal}
+                  format={format}
+                />
+              </div>
+            </div>
 
-                  {/* Clear Filters */}
-                  {(selectedDate || selectedCategory) && (
+            {/* Sidebar Toggle */}
+            <div className="hidden lg:flex items-start pt-4">
+              <button
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                className="bg-indigo-600 text-white p-2 rounded-xl shadow-lg hover:bg-indigo-700 transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                aria-label={sidebarCollapsed ? "Expand filter sidebar" : "Collapse filter sidebar"}
+              >
+                {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+              </button>
+            </div>
+
+            {/* Expense List */}
+            <div className="flex-1 min-w-0 space-y-4">
+              {/* Filtered empty state */}
+              {allFilteredExpenses.length === 0 && hasActiveFilters && (
+                <Card className="border-none shadow-lg dark:bg-slate-900">
+                  <CardContent className="flex flex-col items-center justify-center py-10">
+                    <div className="w-16 h-16 bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-600 rounded-full flex items-center justify-center mb-4">
+                      <Search className="h-8 w-8 text-slate-400 dark:text-slate-500" />
+                    </div>
+                    <h3 className="text-lg font-bold mb-1 text-slate-900 dark:text-white">No matching expenses</h3>
+                    <p className="text-slate-500 dark:text-slate-400 text-sm text-center mb-4 max-w-sm">
+                      No expenses match your current filters. Try adjusting your search or clearing filters.
+                    </p>
                     <Button
                       variant="outline"
                       onClick={() => {
+                        setSearchQuery('')
                         setSelectedDate(null)
                         setSelectedCategory(null)
                       }}
-                      className="w-full mt-6 rounded-xl border-slate-200"
+                      className="rounded-xl"
                     >
                       <X className="h-4 w-4 mr-2" />
-                      Clear Filters
+                      Clear All Filters
                     </Button>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
+                  </CardContent>
+                </Card>
+              )}
 
-          {/* Sidebar Toggle Button */}
-          <button
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className={cn(
-              "fixed top-1/2 -translate-y-1/2 z-40 bg-indigo-600 text-white p-2 rounded-xl shadow-lg hover:bg-indigo-700 transition-all",
-              sidebarCollapsed ? "left-4" : "left-[calc(33.333%-1rem)]"
-            )}
-          >
-            {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-          </button>
-
-          {/* Main Content - Timeline View */}
-          <div className="flex-1 space-y-6">
-            {Object.entries(groupedExpenses)
-              .sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime())
-              .map(([date, dayExpenses]: [string, Expense[]]) => {
-                const dayTotal = dayExpenses.reduce((sum: number, e: Expense) => sum + e.amount, 0)
-                const dateObj = new Date(date + 'T00:00:00')
-                
-                return (
-                  <div key={date} className="space-y-3">
-                    {/* Date Header */}
-                    <div className="flex items-center justify-between sticky top-20 z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl px-6 py-3 border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-xl p-2">
-                          <Calendar className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-slate-900 dark:text-white">
-                            {dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-                          </h3>
-                          <p className="text-xs text-slate-500">{dayExpenses.length} transactions</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-slate-500 mb-0.5">Daily Total</p>
-                        <p className="text-lg font-bold text-rose-600">{format(dayTotal)}</p>
-                      </div>
-                    </div>
-
-                    {/* Expense Cards */}
-                    <div className="space-y-3">
-                      {dayExpenses.map((expense) => {
-                        const Icon = getCategoryIcon(expense.category_icon || undefined)
-
-                        return (
-                          <Card
-                            key={expense.id}
-                            className="group border-none shadow-lg hover:shadow-2xl transition-all duration-300 bg-white dark:bg-slate-900 rounded-2xl overflow-hidden"
-                          >
-                            <CardContent className="p-0">
-                              <div className="flex items-center gap-4 p-5">
-                                {/* Category Icon */}
-                                <div
-                                  className={cn("flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center shadow-lg text-white", getCategoryColor(expense.category_color || undefined))}
-                                >
-                                  <Icon className="h-6 w-6 text-white" />
-                                </div>
-
-                                {/* Expense Details */}
-                                <div className="flex-1 min-w-0">
-                                  <h4 className="font-semibold text-slate-900 dark:text-white truncate group-hover:text-indigo-600 transition-colors">
-                                    {expense.description}
-                                  </h4>
-                                  <div className="flex items-center gap-3 mt-1 flex-wrap">
-                                    <Badge variant="secondary" className="text-xs rounded-lg">
-                                      {expense.category_name || 'Uncategorized'}
-                                    </Badge>
-                                    <span className="text-xs text-slate-500">
-                                      {expense.payment_method}
-                                    </span>
-                                    {(expense as any).tags?.map((tag: string, ti: number) => (
-                                      <Badge key={ti} variant="outline" className="text-[10px] rounded-md px-1.5 py-0 border-indigo-200 text-indigo-600 dark:border-indigo-800 dark:text-indigo-400">
-                                        {tag}
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                </div>
-
-                                {/* Amount */}
-                                <div className="text-right flex-shrink-0">
-                                  <p className="text-xl font-bold text-rose-600">
-                                    {format(expense.amount)}
-                                  </p>
-                                </div>
-
-                                {/* Actions */}
-                                <div className="flex gap-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleEdit(expense)}
-                                    className="rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-950 hover:text-indigo-600"
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setDeleteTarget(expense.id!)}
-                                    className="rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950 hover:text-rose-600"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        )
-                      })}
-                    </div>
-                  </div>
+              {/* Date-grouped view (newest/oldest sort) */}
+              {isDateSort && groupedExpenses && Object.entries(groupedExpenses)
+                .sort(([a], [b]) => sortOption === 'newest'
+                  ? new Date(b).getTime() - new Date(a).getTime()
+                  : new Date(a).getTime() - new Date(b).getTime()
                 )
-              })}
-          </div>
+                .map(([date, dayExpenses]: [string, Expense[]]) => {
+                  const dayTotal = dayExpenses.reduce((sum: number, e: Expense) => sum + e.amount, 0)
+                  const dateObj = new Date(date + 'T00:00:00')
+                  
+                  return (
+                    <div key={date} className="space-y-3">
+                      {/* Date Header */}
+                      <div className="flex items-center justify-between sticky top-20 z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl px-4 md:px-6 py-3 border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-xl p-2">
+                            <Calendar className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-slate-900 dark:text-white text-sm md:text-base">
+                              {dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                            </h3>
+                            <p className="text-xs text-slate-500">{dayExpenses.length} transaction{dayExpenses.length !== 1 ? 's' : ''}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-slate-500 mb-0.5">Daily Total</p>
+                          <p className="text-base md:text-lg font-bold text-rose-600 dark:text-rose-400 tabular-nums">{format(dayTotal)}</p>
+                        </div>
+                      </div>
+                      <div className="space-y-3">
+                        {dayExpenses.map(expense => renderExpenseCard(expense, false))}
+                      </div>
+                    </div>
+                  )
+                })}
 
-          {/* Load More */}
-          {hasMore && (
-            <div className="flex justify-center pt-6">
-              <Button
-                variant="outline"
-                onClick={() => setVisibleCount(prev => prev + 50)}
-                className="rounded-xl px-8"
-              >
-                Load More ({allFilteredExpenses.length - visibleCount} remaining)
-              </Button>
+              {/* Flat view (highest/lowest sort) */}
+              {!isDateSort && (
+                <div className="space-y-3">
+                  {paginatedExpenses.map(expense => renderExpenseCard(expense, true))}
+                </div>
+              )}
+
+              {/* Load More */}
+              {hasMore && (
+                <div className="flex justify-center pt-6">
+                  <Button
+                    variant="outline"
+                    onClick={() => setVisibleCount(prev => prev + 50)}
+                    className="rounded-xl px-8"
+                  >
+                    Load More ({sortedFilteredExpenses.length - visibleCount} remaining)
+                  </Button>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
 
-      {/* Delete Confirmation */}
-      <ConfirmDialog
-        open={!!deleteTarget}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete Expense"
-        description="Are you sure you want to delete this expense? This action cannot be undone."
-        confirmLabel="Delete"
-        variant="destructive"
-        onConfirm={() => deleteTarget && handleDelete(deleteTarget)}
-      />
+        {/* ─── Dialogs ─────────────────────────────────────────── */}
 
-      {/* Add Expense Modal - Centered */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-300 p-4">
-          <Card className="w-full max-w-2xl rounded-3xl border-none shadow-2xl animate-in zoom-in-95 duration-300 dark:bg-slate-900">
-            <CardHeader className="border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-slate-800 dark:to-slate-800">
+        {/* Delete Confirmation */}
+        <ConfirmDialog
+          open={!!deleteTarget}
+          onOpenChange={(open) => { if (!open && !deleting) setDeleteTarget(null) }}
+          title="Delete Expense"
+          description="Are you sure you want to delete this expense? This action cannot be undone."
+          confirmLabel="Delete"
+          variant="destructive"
+          loading={deleting}
+          onConfirm={() => deleteTarget && handleDelete(deleteTarget)}
+        />
+
+        {/* Discard Changes Confirmation */}
+        <ConfirmDialog
+          open={showDiscardWarning}
+          onOpenChange={setShowDiscardWarning}
+          title="Discard changes?"
+          description="You have unsaved changes. Are you sure you want to close without saving?"
+          confirmLabel="Discard"
+          cancelLabel="Keep editing"
+          variant="destructive"
+          onConfirm={() => {
+            setShowDiscardWarning(false)
+            resetForm()
+          }}
+        />
+
+        {/* Add/Edit Expense Form */}
+        <Dialog open={showForm} onOpenChange={handleFormOpenChange}>
+          <DialogContent
+            hideClose
+            className="max-w-2xl rounded-3xl border-none shadow-2xl p-0 gap-0 max-h-[90vh] overflow-hidden dark:bg-slate-900"
+            onPointerDownOutside={(e) => { if (submitting) e.preventDefault() }}
+            onEscapeKeyDown={(e) => { if (submitting) e.preventDefault() }}
+          >
+            {/* Header */}
+            <div className="border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-slate-800 dark:to-slate-800 px-6 py-5">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                  {editingExpense ? 'Edit Expense' : 'Add New Expense'}
-                </CardTitle>
-                <Button variant="ghost" size="sm" onClick={() => {
-                  setShowForm(false)
-                  setEditingExpense(null)
-                }} className="rounded-xl">
+                <DialogHeader>
+                  <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                    {editingExpense ? 'Edit Expense' : 'Add New Expense'}
+                  </DialogTitle>
+                  <DialogDescription className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                    {editingExpense ? 'Update the details of this expense.' : 'Fill in the details to record a new expense.'}
+                  </DialogDescription>
+                </DialogHeader>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => handleFormOpenChange(false)}
+                  disabled={submitting}
+                  className="rounded-xl"
+                  aria-label="Close form"
+                >
                   <X className="h-5 w-5" />
                 </Button>
               </div>
-            </CardHeader>
-            <CardContent className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-              <div className="grid grid-cols-2 gap-4">
+            </div>
+
+            {/* Form Body */}
+            <div className="p-6 space-y-4 overflow-y-auto max-h-[calc(90vh-180px)]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Amount *</Label>
+                  <Label htmlFor="expense-amount">Amount *</Label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium">{symbol}</span>
                     <Input
+                      ref={amountInputRef}
+                      id="expense-amount"
                       type="number"
                       min="0.01"
                       step="0.01"
                       value={formData.amount || ''}
                       onChange={(e) => {
-                        setFormData({ ...formData, amount: parseFloat(e.target.value) })
+                        const val = e.target.value
+                        setFormData({ ...formData, amount: val === '' ? 0 : parseFloat(val) })
                         if (formErrors.amount) setFormErrors(prev => { const n = {...prev}; delete n.amount; return n })
                       }}
                       placeholder="0.00"
                       className={cn("rounded-xl pl-8", formErrors.amount && "border-red-500 focus:ring-red-500")}
+                      aria-invalid={!!formErrors.amount}
+                      aria-describedby={formErrors.amount ? "amount-error" : undefined}
+                      disabled={submitting}
                     />
                   </div>
-                  {formErrors.amount && <p className="text-xs text-red-500">{formErrors.amount}</p>}
+                  {formErrors.amount && <p id="amount-error" className="text-xs text-red-500" role="alert">{formErrors.amount}</p>}
                 </div>
                 <div className="space-y-2">
-                  <Label>Date *</Label>
+                  <Label htmlFor="expense-date">Date *</Label>
                   <Input
+                    id="expense-date"
                     type="date"
                     value={formData.transaction_date}
-                    onChange={(e) => setFormData({ ...formData, transaction_date: e.target.value })}
+                    onChange={(e) => {
+                      setFormData({ ...formData, transaction_date: e.target.value })
+                      if (formErrors.transaction_date) setFormErrors(prev => { const n = {...prev}; delete n.transaction_date; return n })
+                    }}
                     className={cn("rounded-xl", formErrors.transaction_date && "border-red-500")}
+                    aria-invalid={!!formErrors.transaction_date}
+                    aria-describedby={formErrors.transaction_date ? "date-error" : undefined}
+                    disabled={submitting}
                   />
-                  {formErrors.transaction_date && <p className="text-xs text-red-500">{formErrors.transaction_date}</p>}
+                  {formErrors.transaction_date && <p id="date-error" className="text-xs text-red-500" role="alert">{formErrors.transaction_date}</p>}
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label>Description *</Label>
+                <Label htmlFor="expense-description">Description *</Label>
                 <Input
+                  id="expense-description"
                   value={formData.description}
                   onChange={(e) => {
                     setFormData({ ...formData, description: e.target.value })
@@ -720,8 +1161,11 @@ export default function ExpensesPage() {
                   }}
                   placeholder="What did you spend on?"
                   className={cn("rounded-xl", formErrors.description && "border-red-500 focus:ring-red-500")}
+                  aria-invalid={!!formErrors.description}
+                  aria-describedby={formErrors.description ? "description-error" : undefined}
+                  disabled={submitting}
                 />
-                {formErrors.description && <p className="text-xs text-red-500">{formErrors.description}</p>}
+                {formErrors.description && <p id="description-error" className="text-xs text-red-500" role="alert">{formErrors.description}</p>}
                 {/* AI Category Suggestion */}
                 {(aiSuggestion || aiLoading) && !formData.category_id && (
                   <div className="flex items-center gap-2 mt-1">
@@ -747,22 +1191,23 @@ export default function ExpensesPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Category</Label>
+                <Label htmlFor="expense-category">Category</Label>
                 <Select
                   value={formData.category_id || '_none'}
                   onValueChange={(val) => setFormData({ ...formData, category_id: val === '_none' ? '' : val })}
+                  disabled={submitting}
                 >
-                  <SelectTrigger className="rounded-xl">
+                  <SelectTrigger className="rounded-xl" id="expense-category">
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="_none">Uncategorized</SelectItem>
                     {categoriesMaster.map((cat) => {
-                      const Icon = getCategoryIcon(cat.icon)
+                      const CatIcon = getCategoryIcon(cat.icon)
                       return (
                         <SelectItem key={cat.id} value={cat.id}>
                           <div className="flex items-center gap-2">
-                            <Icon className="h-4 w-4" />
+                            <CatIcon className="h-4 w-4" />
                             {cat.name}
                           </div>
                         </SelectItem>
@@ -773,12 +1218,13 @@ export default function ExpensesPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Payment Method</Label>
+                <Label htmlFor="expense-payment">Payment Method</Label>
                 <Select
                   value={formData.payment_method}
                   onValueChange={(val) => setFormData({ ...formData, payment_method: val })}
+                  disabled={submitting}
                 >
-                  <SelectTrigger className="rounded-xl">
+                  <SelectTrigger className="rounded-xl" id="expense-payment">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -791,58 +1237,75 @@ export default function ExpensesPage() {
                 </Select>
               </div>
 
-              {/* Tags Input */}
+              {/* Tags */}
               <div className="space-y-2">
-                <Label>Tags</Label>
+                <Label htmlFor="expense-tags">Tags</Label>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {formData.tags.map((tag, idx) => (
                     <Badge key={idx} variant="secondary" className="rounded-lg px-2.5 py-1 text-xs gap-1.5 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                       {tag}
-                      <button type="button" onClick={() => setFormData({ ...formData, tags: formData.tags.filter((_, i) => i !== idx) })} className="hover:text-red-500 transition-colors">
+                      <button 
+                        type="button" 
+                        onClick={() => setFormData({ ...formData, tags: formData.tags.filter((_, i) => i !== idx) })} 
+                        className="hover:text-red-500 transition-colors"
+                        aria-label={`Remove tag: ${tag}`}
+                        disabled={submitting}
+                      >
                         <X className="h-3 w-3" />
                       </button>
                     </Badge>
                   ))}
                 </div>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Add a tag and press Enter..."
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && tagInput.trim()) {
-                        e.preventDefault()
-                        if (!formData.tags.includes(tagInput.trim())) {
-                          setFormData({ ...formData, tags: [...formData.tags, tagInput.trim()] })
-                        }
-                        setTagInput('')
+                <Input
+                  id="expense-tags"
+                  placeholder="Add a tag and press Enter..."
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && tagInput.trim()) {
+                      e.preventDefault()
+                      const normalizedTag = tagInput.trim()
+                      if (!formData.tags.some(t => t.toLowerCase() === normalizedTag.toLowerCase())) {
+                        setFormData({ ...formData, tags: [...formData.tags, normalizedTag] })
                       }
-                    }}
-                    className="rounded-xl flex-1"
-                  />
-                </div>
+                      setTagInput('')
+                    }
+                  }}
+                  className="rounded-xl"
+                  disabled={submitting}
+                />
                 <p className="text-xs text-slate-500">Press Enter to add tags</p>
               </div>
 
+              {/* Action Buttons */}
               <div className="flex gap-3 pt-4">
                 <Button
                   variant="outline"
-                  onClick={() => setShowForm(false)}
+                  onClick={() => handleFormOpenChange(false)}
+                  disabled={submitting}
                   className="flex-1 rounded-xl"
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleSubmit}
+                  disabled={submitting}
                   className="flex-1 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
                 >
-                  {editingExpense ? 'Save Changes' : 'Add Expense'}
+                  {submitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      {editingExpense ? 'Saving...' : 'Adding...'}
+                    </>
+                  ) : (
+                    editingExpense ? 'Save Changes' : 'Add Expense'
+                  )}
                 </Button>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-    </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </TooltipProvider>
   )
 }
