@@ -49,6 +49,7 @@ class Category(Base):
     color = Column(String(7), default='#3B82F6')
     icon = Column(String(50), default='folder')
     is_system = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
     parent_id = Column(UUID(as_uuid=True), ForeignKey('categories.id'))
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -300,4 +301,53 @@ class ExchangeRate(Base):
     rate = Column(DECIMAL(18, 6), nullable=False)
     date = Column(Date, nullable=False, server_default=func.current_date())
     source = Column(String(50), default='api')
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+class NetWorthSnapshot(Base):
+    __tablename__ = "net_worth_snapshots"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    snapshot_date = Column(Date, nullable=False, server_default=func.current_date())
+    
+    # Asset breakdown
+    investment_value = Column(DECIMAL(15, 2), default=0)
+    lendings_outstanding = Column(DECIMAL(15, 2), default=0)
+    cash_balance = Column(DECIMAL(15, 2), default=0)
+    income_monthly = Column(DECIMAL(15, 2), default=0)
+    other_assets = Column(DECIMAL(15, 2), default=0)
+    
+    # Liability breakdown
+    borrowings_owed = Column(DECIMAL(15, 2), default=0)
+    emi_remaining = Column(DECIMAL(15, 2), default=0)
+    credit_card_debt = Column(DECIMAL(15, 2), default=0)
+    other_liabilities = Column(DECIMAL(15, 2), default=0)
+    
+    # Calculated fields
+    total_assets = Column(DECIMAL(15, 2), default=0)
+    total_liabilities = Column(DECIMAL(15, 2), default=0)
+    net_worth = Column(DECIMAL(15, 2), default=0)
+    
+    # Health metrics
+    health_score = Column(Integer, default=0)
+    savings_rate = Column(DECIMAL(5, 2), default=0)
+    debt_to_income_ratio = Column(DECIMAL(5, 2), default=0)
+    
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    title = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    type = Column(String(20), default='info')
+    read = Column(Boolean, default=False)
+    action_label = Column(String(100))
+    action_href = Column(String(255))
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())

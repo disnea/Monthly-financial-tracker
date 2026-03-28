@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store'
 import { Sidebar } from '@/components/dashboard/sidebar'
+import { Onboarding } from '@/components/dashboard/onboarding'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Menu } from 'lucide-react'
@@ -14,6 +15,7 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const [mounted, setMounted] = useState(false)
+  const [showOnboarding, setShowOnboarding] = useState(false)
   const router = useRouter()
   
   // Simple authentication check using localStorage directly
@@ -25,6 +27,10 @@ export default function DashboardLayout({
 
   useEffect(() => {
     setMounted(true)
+    // Check if onboarding has been completed
+    if (!localStorage.getItem('onboarding_completed')) {
+      setShowOnboarding(true)
+    }
   }, [])
 
   useEffect(() => {
@@ -66,8 +72,18 @@ export default function DashboardLayout({
     )
   }
 
+  const handleOnboardingComplete = () => {
+    localStorage.setItem('onboarding_completed', 'true')
+    setShowOnboarding(false)
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
+      {/* Onboarding overlay for new users */}
+      {showOnboarding && (
+        <Onboarding onComplete={handleOnboardingComplete} />
+      )}
+
       {/* Desktop sidebar */}
       <div className="hidden md:block">
         <Sidebar />

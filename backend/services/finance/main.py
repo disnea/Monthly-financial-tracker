@@ -1,11 +1,12 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Request, UploadFile, File, Body, Form
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, update
+from sqlalchemy import select, func, and_, update, text
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import joinedload
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 import uuid
 import io
@@ -18,7 +19,7 @@ import sys
 sys.path.append('/app')
 
 from shared.database import get_db, set_tenant_context
-from shared.models import Expense, Category, Budget, ExchangeRate, Borrowing, BorrowingRepayment, Income, Lending, LendingCollection
+from shared.models import Expense, Category, Budget, ExchangeRate, Borrowing, BorrowingRepayment, Income, Lending, LendingCollection, NetWorthSnapshot, Notification
 from shared.middleware.auth import get_current_user, auth_middleware
 from shared.config import get_settings
 
@@ -82,6 +83,7 @@ class CategoryResponse(BaseModel):
     color: str
     icon: str
     is_system: bool
+    parent_id: Optional[str] = None
 
 # Default categories to auto-seed for each tenant
 DEFAULT_CATEGORIES = [
@@ -135,6 +137,41 @@ class BudgetResponse(BaseModel):
     remaining: float
     percentage_used: float
 
+class NetWorthSnapshotResponse(BaseModel):
+    id: str
+    snapshot_date: date
+    investment_value: float
+    lendings_outstanding: float
+    cash_balance: float
+    income_monthly: float
+    other_assets: float
+    borrowings_owed: float
+    emi_remaining: float
+    credit_card_debt: float
+    other_liabilities: float
+    total_assets: float
+    total_liabilities: float
+    net_worth: float
+    health_score: int
+    savings_rate: float
+    debt_to_income_ratio: float
+    created_at: datetime
+
+class NetWorthTrendResponse(BaseModel):
+    date: date
+    net_worth: float
+    change_percent: float
+    health_score: int
+
+class HealthScoreBreakdown(BaseModel):
+    overall_score: int
+    savings_score: int
+    debt_score: int
+    budget_score: int
+    investment_score: int
+    recommendations: List[str]
+    next_milestone: str
+
 async def get_exchange_rate(
     db: AsyncSession,
     from_currency: str,
@@ -181,6 +218,10 @@ async def ensure_default_categories_for_tenant(
     db: AsyncSession,
     tenant_id: str,
 ):
+    # Ensure schema has latest columns (for legacy databases)
+    await db.execute(text("ALTER TABLE categories ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE"))
+    await db.commit()
+
     # Check if this tenant already has any categories
     result = await db.execute(
         select(func.count(Category.id)).where(
@@ -205,6 +246,13 @@ async def ensure_default_categories_for_tenant(
         db.add(new_cat)
 
     await db.commit()
+
+async def ensure_net_worth_snapshot_table(db: AsyncSession):
+    def _create(sync_session):
+        engine = sync_session.get_bind()
+        NetWorthSnapshot.__table__.create(bind=engine, checkfirst=True)
+
+    await db.run_sync(_create)
 
 @app.get("/health")
 async def health_check():
@@ -262,6 +310,35 @@ async def create_expense(
         category_color=category.color if category else None,
         category_icon=category.icon if category else None,
     )
+
+@app.get("/categories", response_model=List[CategoryResponse])
+async def list_categories(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    user = get_current_user(request)
+    await set_tenant_context(db, user["tenant_id"])
+    await ensure_default_categories_for_tenant(db, user["tenant_id"])
+
+    result = await db.execute(
+        select(Category)
+        .where(Category.tenant_id == uuid.UUID(user["tenant_id"]))
+        .order_by(Category.name.asc())
+    )
+    categories = result.scalars().all()
+
+    return [
+        CategoryResponse(
+            id=str(cat.id),
+            name=cat.name,
+            type=cat.type,
+            color=cat.color,
+            icon=cat.icon,
+            is_system=cat.is_system,
+            parent_id=str(cat.parent_id) if cat.parent_id else None,
+        )
+        for cat in categories
+    ]
 
 @app.get("/expenses", response_model=List[ExpenseResponse])
 async def get_expenses(
@@ -1774,6 +1851,418 @@ async def detect_anomalies(request: Request, db: AsyncSession = Depends(get_db))
                     "date": str(exp.transaction_date)
                 })
     return anomalies
+
+# Health Score Calculation Algorithm
+def calculate_health_score(
+    savings_rate: float,
+    debt_to_income_ratio: float,
+    budget_utilization: float,
+    investment_ratio: float,
+    emergency_fund_months: float
+) -> HealthScoreBreakdown:
+    """
+    Calculate comprehensive financial health score (0-100)
+    """
+    # Savings Score (30% weight) - Target: 20%+ savings rate
+    savings_score = min(100, max(0, (savings_rate / 0.20) * 100))
+    
+    # Debt Score (25% weight) - Target: <36% debt-to-income
+    debt_score = max(0, 100 - (debt_to_income_ratio / 0.36) * 100)
+    
+    # Budget Score (20% weight) - Target: <80% budget utilization
+    budget_score = max(0, 100 - max(0, (budget_utilization - 80) / 20 * 100))
+    
+    # Investment Score (15% weight) - Target: 15%+ income invested
+    investment_score = min(100, max(0, (investment_ratio / 0.15) * 100))
+    
+    # Emergency Fund Score (10% weight) - Target: 3-6 months
+    emergency_score = min(100, max(0, (emergency_fund_months / 3) * 100))
+    
+    # Weighted overall score
+    overall_score = int(
+        savings_score * 0.30 +
+        debt_score * 0.25 +
+        budget_score * 0.20 +
+        investment_score * 0.15 +
+        emergency_score * 0.10
+    )
+    
+    # Generate recommendations
+    recommendations = []
+    if savings_score < 70:
+        recommendations.append("Increase savings rate to at least 20% of income")
+    if debt_score < 70:
+        recommendations.append("Focus on reducing high-interest debt")
+    if budget_score < 70:
+        recommendations.append("Review and optimize your budget categories")
+    if investment_score < 70:
+        recommendations.append("Consider increasing investment contributions")
+    if emergency_score < 70:
+        recommendations.append("Build emergency fund to 3+ months of expenses")
+    
+    # Determine next milestone
+    if overall_score < 50:
+        next_milestone = "Build emergency fund and reduce debt"
+    elif overall_score < 70:
+        next_milestone = "Increase savings rate to 20%"
+    elif overall_score < 85:
+        next_milestone = "Optimize investment portfolio"
+    else:
+        next_milestone = "Maintain excellent financial health"
+    
+    return HealthScoreBreakdown(
+        overall_score=overall_score,
+        savings_score=int(savings_score),
+        debt_score=int(debt_score),
+        budget_score=int(budget_score),
+        investment_score=int(investment_score),
+        recommendations=recommendations,
+        next_milestone=next_milestone
+    )
+
+# Net Worth Snapshot Endpoint
+@app.post("/net-worth/snapshot", response_model=NetWorthSnapshotResponse)
+async def create_net_worth_snapshot(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    user = request.state.user
+    await set_tenant_context(db, user["tenant_id"])
+    await ensure_net_worth_snapshot_table(db)
+    
+    # Get current financial data
+    expenses_result = await db.execute(
+        select(func.sum(Expense.amount)).where(Expense.user_id == uuid.UUID(user["user_id"]))
+    )
+    total_expenses = float(expenses_result.scalar() or 0)
+    
+    # Calculate current metrics (simplified for demo)
+    investment_value = 0  # Would come from investment service
+    lendings_outstanding = 0  # Would come from lending service
+    borrowings_owed = 0  # Would come from borrowing service
+    emi_remaining = 0  # Would come from EMI service
+    
+    # Get current month income
+    current_month = date.today().replace(day=1)
+    income_result = await db.execute(
+        select(func.sum(Income.amount))
+        .where(
+            Income.user_id == uuid.UUID(user["user_id"]),
+            Income.income_date >= current_month
+        )
+    )
+    monthly_income = float(income_result.scalar() or 0)
+    
+    # Calculate totals
+    total_assets = investment_value + lendings_outstanding + monthly_income
+    total_liabilities = borrowings_owed + emi_remaining
+    net_worth = total_assets - total_liabilities
+    
+    # Calculate health metrics
+    savings_rate = (monthly_income - total_expenses) / max(monthly_income, 1) * 100
+    debt_to_income_ratio = total_liabilities / max(monthly_income, 1) * 100
+    
+    # Create snapshot
+    snapshot = NetWorthSnapshot(
+        tenant_id=uuid.UUID(user["tenant_id"]),
+        user_id=uuid.UUID(user["user_id"]),
+        investment_value=investment_value,
+        lendings_outstanding=lendings_outstanding,
+        cash_balance=0,
+        income_monthly=monthly_income,
+        other_assets=0,
+        borrowings_owed=borrowings_owed,
+        emi_remaining=emi_remaining,
+        credit_card_debt=0,
+        other_liabilities=0,
+        total_assets=total_assets,
+        total_liabilities=total_liabilities,
+        net_worth=net_worth,
+        health_score=0,  # Will be calculated below
+        savings_rate=savings_rate,
+        debt_to_income_ratio=debt_to_income_ratio
+    )
+    
+    db.add(snapshot)
+    await db.commit()
+    await db.refresh(snapshot)
+    
+    return NetWorthSnapshotResponse(
+        id=str(snapshot.id),
+        snapshot_date=snapshot.snapshot_date,
+        investment_value=float(snapshot.investment_value),
+        lendings_outstanding=float(snapshot.lendings_outstanding),
+        cash_balance=float(snapshot.cash_balance),
+        income_monthly=float(snapshot.income_monthly),
+        other_assets=float(snapshot.other_assets),
+        borrowings_owed=float(snapshot.borrowings_owed),
+        emi_remaining=float(snapshot.emi_remaining),
+        credit_card_debt=float(snapshot.credit_card_debt),
+        other_liabilities=float(snapshot.other_liabilities),
+        total_assets=float(snapshot.total_assets),
+        total_liabilities=float(snapshot.total_liabilities),
+        net_worth=float(snapshot.net_worth),
+        health_score=snapshot.health_score,
+        savings_rate=float(snapshot.savings_rate),
+        debt_to_income_ratio=float(snapshot.debt_to_income_ratio),
+        created_at=snapshot.created_at
+    )
+
+# Net Worth Trend Endpoint
+@app.get("/net-worth/trend", response_model=List[NetWorthTrendResponse])
+async def get_net_worth_trend(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    months: int = 12
+):
+    user = request.state.user
+    await set_tenant_context(db, user["tenant_id"])
+    await ensure_net_worth_snapshot_table(db)
+    
+    # Get historical snapshots (retry once if table missing)
+    try:
+        result = await db.execute(
+            select(NetWorthSnapshot)
+            .where(
+                NetWorthSnapshot.user_id == uuid.UUID(user["user_id"]),
+                NetWorthSnapshot.snapshot_date >= date.today() - timedelta(days=months * 30)
+            )
+            .order_by(NetWorthSnapshot.snapshot_date.asc())
+        )
+    except ProgrammingError as exc:
+        if "net_worth_snapshots" not in str(exc):
+            raise
+        await ensure_net_worth_snapshot_table(db)
+        result = await db.execute(
+            select(NetWorthSnapshot)
+            .where(
+                NetWorthSnapshot.user_id == uuid.UUID(user["user_id"]),
+                NetWorthSnapshot.snapshot_date >= date.today() - timedelta(days=months * 30)
+            )
+            .order_by(NetWorthSnapshot.snapshot_date.asc())
+        )
+    snapshots = result.scalars().all()
+    
+    trend_data = []
+    previous_worth = None
+    
+    for snapshot in snapshots:
+        change_percent = 0
+        if previous_worth and previous_worth != 0:
+            change_percent = ((snapshot.net_worth - previous_worth) / previous_worth) * 100
+        
+        trend_data.append(NetWorthTrendResponse(
+            date=snapshot.snapshot_date,
+            net_worth=float(snapshot.net_worth),
+            change_percent=change_percent,
+            health_score=snapshot.health_score
+        ))
+        
+        previous_worth = snapshot.net_worth
+    
+    return trend_data
+
+# Health Score Endpoint
+@app.get("/net-worth/health-score", response_model=HealthScoreBreakdown)
+async def get_health_score(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    user = request.state.user
+    await set_tenant_context(db, user["tenant_id"])
+    
+    # Get current financial metrics
+    current_month = date.today().replace(day=1)
+    
+    # Income
+    income_result = await db.execute(
+        select(func.sum(Income.amount))
+        .where(
+            Income.user_id == uuid.UUID(user["user_id"]),
+            Income.income_date >= current_month
+        )
+    )
+    monthly_income = float(income_result.scalar() or 0)
+    
+    # Expenses
+    expense_result = await db.execute(
+        select(func.sum(Expense.amount))
+        .where(
+            Expense.user_id == uuid.UUID(user["user_id"]),
+            Expense.transaction_date >= current_month
+        )
+    )
+    monthly_expenses = float(expense_result.scalar() or 0)
+    
+    # Budget utilization (total budget vs current month expenses)
+    budget_total_result = await db.execute(
+        select(func.sum(Budget.amount))
+        .where(
+            Budget.user_id == uuid.UUID(user["user_id"]),
+            Budget.is_active == True
+        )
+    )
+    budget_total = float(budget_total_result.scalar() or 0)
+    budget_spent = monthly_expenses  # approximate with current month's spend
+    budget_utilization = (budget_spent / max(budget_total, 1)) * 100 if budget_total > 0 else 0
+    
+    # Calculate metrics
+    savings_rate = (monthly_income - monthly_expenses) / max(monthly_income, 1) * 100
+    debt_to_income_ratio = 0  # Would calculate from actual debt data
+    investment_ratio = 0  # Would calculate from investment data
+    emergency_fund_months = 0  # Would calculate from emergency fund data
+    
+    # Calculate health score
+    health_breakdown = calculate_health_score(
+        savings_rate=savings_rate,
+        debt_to_income_ratio=debt_to_income_ratio,
+        budget_utilization=budget_utilization,
+        investment_ratio=investment_ratio,
+        emergency_fund_months=emergency_fund_months
+    )
+    
+    return health_breakdown
+
+@app.get("/recurring")
+async def get_recurring_transactions(request: Request, db: AsyncSession = Depends(get_db)):
+    """Return all recurring expenses and income for the current user."""
+    user = request.state.user
+    await set_tenant_context(db, user["tenant_id"])
+    uid = uuid.UUID(user["user_id"])
+
+    # ── Recurring Expenses ──────────────────────────────────────────────
+    expense_result = await db.execute(
+        select(Expense)
+        .options(joinedload(Expense.category))
+        .where(Expense.user_id == uid, Expense.is_recurring == True)
+        .order_by(Expense.created_at.desc())
+    )
+    recurring_expenses = []
+    for exp in expense_result.scalars().all():
+        config = exp.recurring_config or {}
+        recurring_expenses.append({
+            "id": str(exp.id),
+            "type": "expense",
+            "amount": float(exp.amount),
+            "currency": exp.currency,
+            "description": exp.description,
+            "category_id": str(exp.category_id) if exp.category_id else None,
+            "category_name": exp.category.name if exp.category else None,
+            "category_color": exp.category.color if exp.category else None,
+            "category_icon": exp.category.icon if exp.category else None,
+            "payment_method": exp.payment_method,
+            "tags": exp.tags,
+            "frequency": config.get("frequency"),
+            "next_due_date": config.get("next_due_date"),
+            "transaction_date": str(exp.transaction_date),
+            "created_at": str(exp.created_at),
+        })
+
+    # ── Recurring Income ────────────────────────────────────────────────
+    income_result = await db.execute(
+        select(Income)
+        .where(Income.user_id == uid, Income.is_recurring == True)
+        .order_by(Income.created_at.desc())
+    )
+    recurring_income = []
+    for inc in income_result.scalars().all():
+        recurring_income.append({
+            "id": str(inc.id),
+            "type": "income",
+            "source": inc.source,
+            "amount": float(inc.amount),
+            "currency": inc.currency,
+            "description": inc.description,
+            "frequency": inc.recurrence_period,
+            "next_due_date": str(inc.income_date),
+            "notes": inc.notes,
+            "created_at": str(inc.created_at),
+        })
+
+    return {
+        "recurring_expenses": recurring_expenses,
+        "recurring_income": recurring_income,
+        "total_recurring_expenses": len(recurring_expenses),
+        "total_recurring_income": len(recurring_income),
+    }
+
+
+# =====================================================================
+# Notifications Endpoints
+# =====================================================================
+
+@app.get("/notifications")
+async def list_notifications(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """List notifications for the current user, newest first."""
+    uid = uuid.UUID(current_user["user_id"])
+    await set_tenant_context(db, current_user["tenant_id"])
+
+    result = await db.execute(
+        select(Notification)
+        .where(Notification.user_id == uid)
+        .order_by(Notification.created_at.desc())
+        .limit(50)
+    )
+    notifications = result.scalars().all()
+    return [
+        {
+            "id": str(n.id),
+            "title": n.title,
+            "message": n.message,
+            "type": n.type,
+            "read": n.read,
+            "timestamp": str(n.created_at),
+            "action": {"label": n.action_label, "href": n.action_href}
+            if n.action_label
+            else None,
+        }
+        for n in notifications
+    ]
+
+
+@app.put("/notifications/{notification_id}/read")
+async def mark_notification_read(
+    notification_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Mark a single notification as read."""
+    uid = uuid.UUID(current_user["user_id"])
+    await set_tenant_context(db, current_user["tenant_id"])
+
+    nid = uuid.UUID(notification_id)
+    result = await db.execute(
+        select(Notification).where(Notification.id == nid, Notification.user_id == uid)
+    )
+    notif = result.scalar_one_or_none()
+    if not notif:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
+    notif.read = True
+    await db.commit()
+    return {"status": "ok"}
+
+
+@app.put("/notifications/read-all")
+async def mark_all_notifications_read(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Mark all notifications as read for the current user."""
+    uid = uuid.UUID(current_user["user_id"])
+    await set_tenant_context(db, current_user["tenant_id"])
+
+    await db.execute(
+        update(Notification)
+        .where(Notification.user_id == uid, Notification.read == False)
+        .values(read=True)
+    )
+    await db.commit()
+    return {"status": "ok"}
+
 
 if __name__ == "__main__":
     import uvicorn

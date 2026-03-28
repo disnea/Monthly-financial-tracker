@@ -1,4 +1,7 @@
 import axios from 'axios'
+import type { ExpenseResponse } from '@/types/finance'
+
+export type Expense = ExpenseResponse
 
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:8001'
 const FINANCE_URL = process.env.NEXT_PUBLIC_FINANCE_URL || 'http://localhost:8002'
@@ -120,22 +123,6 @@ export const authApi = {
   },
 }
 
-export interface Expense {
-  id: string
-  amount: number
-  currency: string
-  description?: string | null
-  transaction_date: string        // "YYYY-MM-DD"
-  payment_method?: string | null
-  category_id?: string | null
-  created_at: string
-
-  // new:
-  category_name?: string | null
-  category_color?: string | null
-  category_icon?: string | null
-}
-
 export interface ExpenseCreatePayload {
   category_id?: string | null
   amount: number
@@ -147,13 +134,13 @@ export interface ExpenseCreatePayload {
 }
 
 export const expenseApi = {
-  list(): Promise<Expense[]> {
+  list(): Promise<ExpenseResponse[]> {
     return financeApiClient.get('/expenses').then(r => r.data)
   },
-  create(data: ExpenseCreatePayload): Promise<Expense> {
+  create(data: ExpenseCreatePayload): Promise<ExpenseResponse> {
     return financeApiClient.post('/expenses', data).then(r => r.data)
   },
-  update(id: string, data: ExpenseCreatePayload): Promise<Expense> {
+  update(id: string, data: ExpenseCreatePayload): Promise<ExpenseResponse> {
     return financeApiClient.put(`/expenses/${id}`, data).then(r => r.data)
   },
   delete(id: string): Promise<void> {
@@ -168,6 +155,7 @@ export interface Category {
   color: string
   icon: string
   is_system: boolean
+  parent_id?: string | null
 }
 
 export const categoryApi = {
@@ -182,6 +170,40 @@ export const categoryApi = {
   },
   delete(id: string): Promise<void> {
     return financeApiClient.delete(`/categories/${id}`).then(r => r.data)
+  },
+}
+
+export interface NetWorthTrendData {
+  date: string
+  net_worth: number
+  change_percent: number
+  health_score: number
+}
+
+export interface HealthScoreBreakdown {
+  overall_score: number
+  savings_score: number
+  debt_score: number
+  budget_score: number
+  investment_score: number
+  recommendations: string[]
+  next_milestone: string
+}
+
+export const netWorthApi = {
+  // Get net worth trend data
+  getTrend(months?: number): Promise<NetWorthTrendData[]> {
+    return financeApiClient.get('/net-worth/trend', { params: { months } }).then(r => r.data)
+  },
+  
+  // Get current health score
+  getHealthScore(): Promise<HealthScoreBreakdown> {
+    return financeApiClient.get('/net-worth/health-score').then(r => r.data)
+  },
+  
+  // Create net worth snapshot
+  createSnapshot(): Promise<any> {
+    return financeApiClient.post('/net-worth/snapshot').then(r => r.data)
   },
 }
 
@@ -375,6 +397,21 @@ export const aiApi = {
   },
   anomalies: async () => {
     const response = await financeApiClient.get('/anomalies')
+    return response.data
+  },
+}
+
+export const notificationApi = {
+  list: async () => {
+    const response = await financeApiClient.get('/notifications')
+    return response.data
+  },
+  markRead: async (id: string) => {
+    const response = await financeApiClient.put(`/notifications/${id}/read`)
+    return response.data
+  },
+  markAllRead: async () => {
+    const response = await financeApiClient.put('/notifications/read-all')
     return response.data
   },
 }

@@ -29,6 +29,7 @@ import {
 import { useState, useEffect } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { notificationApi } from '@/lib/api'
 
 interface NavSection {
   title: string
@@ -172,18 +173,37 @@ export function Sidebar() {
   }, [])
 
   const fetchNotifications = async () => {
-    // TODO: Replace with actual API call when notification service is ready
-    setNotifications([])
+    try {
+      const data = await notificationApi.list()
+      setNotifications(
+        data.map((n: any) => ({
+          ...n,
+          timestamp: new Date(n.timestamp),
+        }))
+      )
+    } catch {
+      setNotifications([])
+    }
   }
 
-  const markAsRead = (id: string) => {
-    setNotifications(prev => 
-      prev.map(n => n.id === id ? { ...n, read: true } : n)
-    )
+  const markAsRead = async (id: string) => {
+    try {
+      await notificationApi.markRead(id)
+      setNotifications(prev => 
+        prev.map(n => n.id === id ? { ...n, read: true } : n)
+      )
+    } catch {
+      // silently ignore
+    }
   }
 
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+  const markAllAsRead = async () => {
+    try {
+      await notificationApi.markAllRead()
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+    } catch {
+      // silently ignore
+    }
   }
 
   const unreadCount = notifications.filter(n => !n.read).length

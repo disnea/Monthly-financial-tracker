@@ -9,10 +9,10 @@ import { Badge } from '@/components/ui/badge'
 import { 
   Plus, PieChart, TrendingUp, AlertTriangle, Target, Trash2, Edit,
   Calendar, DollarSign, TrendingDown, CheckCircle2, Clock, X,
-  Utensils, Car, Home, Heart, Film, ShoppingBag, Zap, Search
+  Utensils, Car, Home, Heart, Film, ShoppingBag, Zap, Search, Sparkles
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { budgetApi, Budget } from '@/lib/api'
+import { budgetApi, aiApi, Budget } from '@/lib/api'
 import { useCurrency } from '@/hooks/useCurrency'
 import { cn } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/error-utils'
@@ -65,6 +65,11 @@ export default function BudgetsPage() {
     start_date: new Date().toISOString().split('T')[0],
     end_date: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0]
   })
+
+  // AI budget suggestions state
+  const [aiSuggestions, setAiSuggestions] = useState<any[]>([])
+  const [showAiSuggestions, setShowAiSuggestions] = useState(false)
+  const [aiLoading, setAiLoading] = useState(false)
 
   useEffect(() => {
     fetchBudgets()
@@ -137,6 +142,35 @@ export default function BudgetsPage() {
     }
   }
 
+  const fetchAiSuggestions = async () => {
+    setAiLoading(true)
+    try {
+      const suggestions = await aiApi.budgetSuggestions()
+      setAiSuggestions(suggestions)
+      setShowAiSuggestions(true)
+    } catch (error: any) {
+      toast.error('Could not fetch budget suggestions. Add more expenses first.')
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  const applyAiSuggestion = (suggestion: any) => {
+    const now = new Date()
+    const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    setFormData({
+      name: suggestion.category_name,
+      amount: suggestion.suggested_amount,
+      currency: currency,
+      period: 'monthly',
+      start_date: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0],
+      end_date: endDate.toISOString().split('T')[0],
+      category_id: suggestion.category_id
+    })
+    setShowForm(true)
+    setShowAiSuggestions(false)
+  }
+
   const totalBudget = budgets.reduce((sum, budget) => sum + budget.amount, 0)
   const totalSpent = budgets.reduce((sum, budget) => sum + (budget.spent || 0), 0)
   const totalRemaining = totalBudget - totalSpent
@@ -191,6 +225,15 @@ export default function BudgetsPage() {
                   className="pl-10 rounded-xl border-slate-200"
                 />
               </div>
+              <Button 
+                variant="outline"
+                onClick={fetchAiSuggestions}
+                disabled={aiLoading}
+                className="rounded-xl border-purple-200 text-purple-600 hover:bg-purple-50 dark:border-purple-800 dark:text-purple-400 dark:hover:bg-purple-950/30"
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                {aiLoading ? 'Analyzing...' : 'AI Suggestions'}
+              </Button>
               <Button 
                 onClick={() => setShowForm(true)} 
                 className="rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 shadow-lg"
@@ -424,6 +467,68 @@ export default function BudgetsPage() {
           </div>
         )}
       </div>
+
+      {/* AI Budget Suggestions Panel */}
+      {showAiSuggestions && aiSuggestions.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <Card className="w-full max-w-2xl rounded-3xl border-none shadow-2xl max-h-[80vh] overflow-y-auto dark:bg-slate-900">
+            <CardHeader className="border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-slate-800 dark:to-slate-800">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent flex items-center gap-2">
+                    <Sparkles className="h-6 w-6 text-purple-600" />
+                    AI Budget Suggestions
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    Based on your spending patterns over the last 3 months
+                  </CardDescription>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => setShowAiSuggestions(false)} className="rounded-xl">
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                {aiSuggestions.map((suggestion, idx) => (
+                  <div 
+                    key={idx}
+                    className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 hover:shadow-lg transition-all"
+                  >
+                    <h4 className="font-bold text-slate-900 dark:text-white mb-2">{suggestion.category_name}</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Avg/month (3mo)</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">{format(suggestion.avg_last_3mo)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Peak spending</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">{format(suggestion.max_last_3mo)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Transactions</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">{suggestion.transaction_count}</span>
+                      </div>
+                      <div className="border-t border-slate-200 dark:border-slate-700 pt-2 mt-2 flex justify-between items-center">
+                        <span className="text-purple-600 dark:text-purple-400 font-semibold">Suggested</span>
+                        <span className="text-lg font-bold text-purple-600 dark:text-purple-400">{format(suggestion.suggested_amount)}</span>
+                      </div>
+                    </div>
+                    <Button 
+                      onClick={() => applyAiSuggestion(suggestion)}
+                      className="w-full mt-4 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
+                      size="sm"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create This Budget
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Enhanced Modal */}
       <ConfirmDialog

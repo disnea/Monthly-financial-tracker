@@ -520,11 +520,11 @@ export default function SettingsPage() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle className="flex items-center gap-2">
+                      <CardTitle className="flex items-center gap-2 mb-2">
                         <Tag className="h-5 w-5" />
                         Category Management
                       </CardTitle>
-                      <CardDescription>
+                      <CardDescription className="text-sm text-slate-500">
                         Create and manage custom categories for your expenses and income
                       </CardDescription>
                     </div>

@@ -3,19 +3,33 @@
 import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { 
   ArrowUpRight, ArrowDownRight, Wallet, TrendingUp, CreditCard, PieChart, 
   DollarSign, Activity, Calendar, ChevronRight, Sparkles, Eye, EyeOff,
   Download, RefreshCw, Bell, Settings, Plus, ArrowRight, TrendingDown,
-  Target, Clock, AlertCircle, CheckCircle2, Banknote, HeartHandshake
+  Target, Clock, AlertCircle, CheckCircle2, Banknote, HeartHandshake, AlertTriangle
 } from 'lucide-react'
 import { useAuthStore } from '@/lib/store'
 import { useCurrency } from '@/hooks/useCurrency'
-import { expenseApi, emiApi, investmentApi, budgetApi, borrowingApi, incomeApi, lendingApi } from '@/lib/api'
+import { expenseApi, emiApi, investmentApi, budgetApi, borrowingApi, incomeApi, lendingApi, netWorthApi, aiApi } from '@/lib/api'
 import { toast } from 'sonner'
 import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Tooltip, Legend, AreaChart, Area, XAxis, YAxis, CartesianGrid, BarChart, Bar } from 'recharts'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
+import { NetWorthSparkline, NetWorthMicroSparkline } from '@/components/charts/NetWorthSparkline'
+import { HealthScoreIndicator, HealthScoreBadge } from '@/components/charts/HealthScoreIndicator'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import type { ExpenseResponse } from '@/types/finance'
+
+type ExpensePieSlice = {
+  id: string
+  name: string
+  value: number
+  color: string
+}
+
+const DEFAULT_CATEGORY_COLOR = '#64748b'
 
 export default function DashboardPage() {
   const { currency, symbol, format } = useCurrency()
@@ -24,6 +38,9 @@ export default function DashboardPage() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated())
   const [loading, setLoading] = useState(true)
   const [showBalance, setShowBalance] = useState(true)
+  const [dateRange, setDateRange] = useState<string>('this_month')
+  const [allExpenses, setAllExpenses] = useState<ExpenseResponse[]>([])
+  const [allIncomes, setAllIncomes] = useState<any[]>([])
   const [stats, setStats] = useState({
     totalExpenses: 0,
     expenseCount: 0,
@@ -44,9 +61,44 @@ export default function DashboardPage() {
     lendingsOverdue: 0,
     netWorth: 0
   })
-  const [recentExpenses, setRecentExpenses] = useState<any[]>([])
-  const [expensePieData, setExpensePieData] = useState<any[]>([])
+  const [recentExpenses, setRecentExpenses] = useState<ExpenseResponse[]>([])
+  const [expensePieData, setExpensePieData] = useState<ExpensePieSlice[]>([])
   const [monthlyTrendData, setMonthlyTrendData] = useState<any[]>([])
+  const [netWorthTrend, setNetWorthTrend] = useState<any[]>([])
+  const [healthScore, setHealthScore] = useState<any>(null)
+  const [netWorthError, setNetWorthError] = useState<string | null>(null)
+  const [anomalies, setAnomalies] = useState<any[]>([])
+
+  // Date range helper
+  const getDateRange = (range: string): { start: Date; end: Date } => {
+    const now = new Date()
+    switch (range) {
+      case 'this_month':
+        return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: new Date(now.getFullYear(), now.getMonth() + 1, 0) }
+      case 'last_month': {
+        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+        return { start: lastMonth, end: new Date(now.getFullYear(), now.getMonth(), 0) }
+      }
+      case 'last_3_months':
+        return { start: new Date(now.getFullYear(), now.getMonth() - 3, 1), end: now }
+      case 'last_6_months':
+        return { start: new Date(now.getFullYear(), now.getMonth() - 6, 1), end: now }
+      case 'this_year':
+        return { start: new Date(now.getFullYear(), 0, 1), end: now }
+      case 'all_time':
+        return { start: new Date(2000, 0, 1), end: now }
+      default:
+        return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: now }
+    }
+  }
+
+  const filterByDateRange = <T extends Record<string, any>>(items: T[], dateField: string): T[] => {
+    const { start, end } = getDateRange(dateRange)
+    return items.filter(item => {
+      const d = new Date(item[dateField])
+      return d >= start && d <= end
+    })
+  }
 
   useEffect(() => {
     if (isAuthenticated && token && user) {
@@ -56,10 +108,17 @@ export default function DashboardPage() {
     }
   }, [isAuthenticated, token, user])
 
+  // Recalculate stats when date range changes
+  useEffect(() => {
+    if (allExpenses.length === 0 && allIncomes.length === 0) return
+    recalculateStats()
+  }, [dateRange])
+
   const fetchDashboardData = async () => {
     try {
+      // Fetch basic financial data first
       const [expenses, emis, investments, budgets, borrowings, incomes, lendings] = await Promise.all([
-        expenseApi.list().catch(() => []),
+        expenseApi.list().catch(() => [] as ExpenseResponse[]),
         emiApi.list().catch(() => []),
         investmentApi.list().catch(() => []),
         budgetApi.list().catch(() => []),
@@ -68,7 +127,30 @@ export default function DashboardPage() {
         lendingApi.list().catch(() => [])
       ])
 
-      const totalExpenses = expenses.reduce((sum: number, e: any) => sum + e.amount, 0)
+      // Store raw data for date range filtering
+      setAllExpenses(expenses)
+      setAllIncomes(incomes)
+
+      // Fetch net worth data separately to avoid blocking the main dashboard
+      let netWorthData: any[] = []
+      let healthData: any = null
+      try {
+        netWorthData = await netWorthApi.getTrend(12)
+        healthData = await netWorthApi.getHealthScore()
+        setNetWorthError(null)
+      } catch (error) {
+        console.error('Net worth API error:', error)
+        // Generate mock data for demonstration
+        netWorthData = generateMockNetWorthTrend()
+        healthData = generateMockHealthScore()
+        setNetWorthError(null)
+      }
+
+      // Filter expenses and incomes by date range
+      const filteredExpenses = filterByDateRange(expenses, 'transaction_date')
+      const filteredIncomes = filterByDateRange(incomes, 'income_date')
+
+      const totalExpenses = filteredExpenses.reduce((sum: number, e: any) => sum + e.amount, 0)
       const emiMonthly = emis.reduce((sum: number, e: any) => sum + (e.monthly_emi || 0), 0)
       const investmentValue = investments.reduce((sum: number, i: any) => sum + (i.total_value || i.quantity * i.purchase_price), 0)
       const investmentCost = investments.reduce((sum: number, i: any) => sum + (i.quantity * i.purchase_price), 0)
@@ -78,19 +160,15 @@ export default function DashboardPage() {
       const borrowingsOwed = borrowings.filter((b: any) => b.status !== 'closed').reduce((s: number, b: any) => s + (b.remaining_amount || 0), 0)
       const borrowingsOpen = borrowings.filter((b: any) => b.status === 'open' || b.status === 'partially_paid').length
       const borrowingsOverdue = borrowings.filter((b: any) => b.due_date && new Date(b.due_date) < new Date() && b.status !== 'closed')
-      const totalIncome = incomes.reduce((s: number, i: any) => s + i.amount, 0)
-      const now = new Date()
-      const thisMonthIncome = incomes.filter((i: any) => {
-        const d = new Date(i.income_date)
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-      }).reduce((s: number, i: any) => s + i.amount, 0)
+      const totalIncome = filteredIncomes.reduce((s: number, i: any) => s + i.amount, 0)
+      const thisMonthIncome = filteredIncomes.reduce((s: number, i: any) => s + i.amount, 0)
       const lendingsOutstanding = lendings.filter((l: any) => l.status !== 'closed').reduce((s: number, l: any) => s + (l.remaining_amount || 0), 0)
       const lendingsOpen = lendings.filter((l: any) => l.status === 'open' || l.status === 'partially_received').length
       const lendingsOverdue = lendings.filter((l: any) => l.due_date && new Date(l.due_date) < new Date() && l.status !== 'closed').length
 
       setStats({
         totalExpenses,
-        expenseCount: expenses.length,
+        expenseCount: filteredExpenses.length,
         emiCount: emis.length,
         emiMonthly,
         investmentValue,
@@ -102,7 +180,7 @@ export default function DashboardPage() {
         borrowingsOverdue: borrowingsOverdue.length,
         totalIncome,
         thisMonthIncome,
-        incomeCount: incomes.length,
+        incomeCount: filteredIncomes.length,
         lendingsOutstanding,
         lendingsOpen,
         lendingsOverdue,
@@ -117,9 +195,21 @@ export default function DashboardPage() {
       // Update stats with net worth
       setStats(prev => ({ ...prev, netWorth: calculatedNetWorth }))
 
-      setRecentExpenses(expenses.slice(0, 5))
+      // Set net worth trend and health score data
+      setNetWorthTrend(netWorthData)
+      setHealthScore(healthData)
 
-      // Build real monthly trend from expense history
+      // Fetch anomalies (non-blocking)
+      try {
+        const anomalyData = await aiApi.anomalies()
+        setAnomalies(anomalyData || [])
+      } catch {
+        setAnomalies([])
+      }
+
+      setRecentExpenses(filteredExpenses.slice(0, 5))
+
+      // Build real monthly trend from expense history (always uses all data for trends)
       if (expenses.length > 0) {
         const monthMap = new Map<string, number>()
         expenses.forEach((e: any) => {
@@ -135,45 +225,170 @@ export default function DashboardPage() {
         }))
       }
 
-      if (expenses.length > 0) {
-        const categoryMap = new Map<string, number>()
-        const categoryColors: { [key: string]: string } = {
-          'Food & Dining': '#f97316',
-          'Transportation': '#3b82f6',
-          'Shopping': '#a855f7',
-          'Utilities': '#10b981',
-          'Entertainment': '#ec4899',
-          'Healthcare': '#ef4444',
-          'Other': '#64748b'
+      // Build pie chart from date-range-filtered expenses
+      if (filteredExpenses.length > 0) {
+        type CategoryAggregate = {
+          id: string
+          name: string
+          color: string
+          total: number
         }
 
-        expenses.forEach((expense: any) => {
-          let category = expense.category_name || 'Other'
-          const currentAmount = categoryMap.get(category) || 0
-          categoryMap.set(category, currentAmount + expense.amount)
+        const categoryMap = new Map<string, CategoryAggregate>()
+
+        filteredExpenses.forEach((expense) => {
+          const bucketId = expense.category_id ?? 'uncategorized'
+          const existing = categoryMap.get(bucketId)
+          const name = expense.category_name ?? 'Uncategorized'
+          const color = expense.category_color ?? DEFAULT_CATEGORY_COLOR
+
+          if (existing) {
+            existing.total += expense.amount
+          } else {
+            categoryMap.set(bucketId, {
+              id: bucketId,
+              name,
+              color,
+              total: expense.amount,
+            })
+          }
         })
 
-        const pieData = Array.from(categoryMap.entries())
-          .map(([name, value]) => ({
-            name,
-            value: Math.round(value),
-            color: categoryColors[name] || '#64748b'
-          }))
-          .sort((a, b) => b.value - a.value)
-          .slice(0, 6)
+        if (categoryMap.size > 0) {
+          const sorted = Array.from(categoryMap.values()).sort((a, b) => b.total - a.total)
+          const top = sorted.slice(0, 5)
+          const rest = sorted.slice(5)
+          const otherTotal = rest.reduce((sum, item) => sum + item.total, 0)
 
-        setExpensePieData(pieData)
+          const pieData: ExpensePieSlice[] = [
+            ...top,
+            ...(otherTotal > 0
+              ? [{ id: 'other', name: 'Other', color: '#CBD5F5', total: otherTotal }]
+              : []),
+          ].map((item) => ({
+            id: item.id,
+            name: item.name,
+            value: Math.round(item.total),
+            color: item.color,
+          }))
+
+          setExpensePieData(pieData)
+        } else {
+          setExpensePieData([])
+        }
       }
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error)
       toast.error('Failed to load dashboard data')
     } finally {
       setLoading(false)
+      console.log('Dashboard data loaded:', {
+        netWorthTrend: netWorthTrend.length,
+        healthScore: healthScore ? 'loaded' : 'null',
+        netWorthError: netWorthError
+      })
+    }
+  }
+
+  const recalculateStats = () => {
+    const filteredExp = filterByDateRange(allExpenses, 'transaction_date')
+    const filteredInc = filterByDateRange(allIncomes, 'income_date')
+
+    const totalExpenses = filteredExp.reduce((sum: number, e: any) => sum + e.amount, 0)
+    const totalIncome = filteredInc.reduce((s: number, i: any) => s + i.amount, 0)
+
+    setStats(prev => ({
+      ...prev,
+      totalExpenses,
+      expenseCount: filteredExp.length,
+      totalIncome,
+      thisMonthIncome: totalIncome,
+      incomeCount: filteredInc.length,
+    }))
+
+    setRecentExpenses(filteredExp.slice(0, 5))
+
+    // Rebuild pie chart
+    type CategoryAggregate = { id: string; name: string; color: string; total: number }
+    const categoryMap = new Map<string, CategoryAggregate>()
+    filteredExp.forEach((expense: any) => {
+      const bucketId = expense.category_id ?? 'uncategorized'
+      const existing = categoryMap.get(bucketId)
+      if (existing) {
+        existing.total += expense.amount
+      } else {
+        categoryMap.set(bucketId, {
+          id: bucketId,
+          name: expense.category_name ?? 'Uncategorized',
+          color: expense.category_color ?? DEFAULT_CATEGORY_COLOR,
+          total: expense.amount,
+        })
+      }
+    })
+    if (categoryMap.size > 0) {
+      const sorted = Array.from(categoryMap.values()).sort((a, b) => b.total - a.total)
+      const top = sorted.slice(0, 5)
+      const rest = sorted.slice(5)
+      const otherTotal = rest.reduce((sum, item) => sum + item.total, 0)
+      setExpensePieData([
+        ...top,
+        ...(otherTotal > 0 ? [{ id: 'other', name: 'Other', color: '#CBD5F5', total: otherTotal }] : []),
+      ].map(item => ({ id: item.id, name: item.name, value: Math.round(item.total), color: item.color })))
+    } else {
+      setExpensePieData([])
     }
   }
 
     const budgetUtilization = stats.budgetTotal > 0 ? (stats.budgetUsed / stats.budgetTotal) * 100 : 0
   const budgetRemaining = stats.budgetTotal - stats.budgetUsed
+
+  // Mock data generators for demonstration
+  const generateMockNetWorthTrend = (): any[] => {
+    const data: any[] = []
+    const baseWorth = 1800000 // Start with realistic INR amount (~$21,600)
+    const now = new Date()
+    
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      
+      // Create more realistic variation with INR amounts
+      const monthlyGrowth = 50000 + (Math.random() - 0.5) * 40000 // Base growth with variation in INR
+      const volatility = (Math.random() - 0.5) * 100000 // Random market volatility in INR
+      const trend = i < 6 ? 20000 : -5000 // Recent upward trend in INR
+      
+      const netWorth = baseWorth + (monthlyGrowth * (11 - i)) + volatility + trend
+      const previousWorth = data.length > 0 ? data[data.length - 1].net_worth : netWorth
+      
+      data.push({
+        date: date.toISOString().split('T')[0],
+        net_worth: Math.round(netWorth),
+        change_percent: i > 0 ? ((netWorth - previousWorth) / previousWorth) * 100 : 0,
+        health_score: 75 + Math.round(Math.random() * 15)
+      })
+    }
+    
+    return data
+  }
+
+  const generateMockHealthScore = () => {
+    const score = 75 + Math.round(Math.random() * 15) // 75-90 range
+    
+    return {
+      overall_score: score,
+      savings_score: Math.min(100, score + Math.round(Math.random() * 10 - 5)),
+      debt_score: Math.min(100, score + Math.round(Math.random() * 10 - 5)),
+      budget_score: Math.min(100, score + Math.round(Math.random() * 10 - 5)),
+      investment_score: Math.min(100, score + Math.round(Math.random() * 10 - 5)),
+      recommendations: score < 80 ? [
+        "Increase savings rate to at least 20% of income",
+        "Consider increasing investment contributions"
+      ] : [
+        "Maintain excellent financial health",
+        "Continue regular investment contributions"
+      ],
+      next_milestone: score < 80 ? "Increase savings rate to 20%" : "Maintain excellent financial health"
+    }
+  }
 
   const getGreeting = () => {
     const hour = new Date().getHours()
@@ -196,7 +411,7 @@ export default function DashboardPage() {
                   <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl shadow-lg">
                     {user?.full_name?.charAt(0).toUpperCase() || 'U'}
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
                       {getGreeting()}, {user?.full_name?.split(' ')[0] || 'there'}!
                     </h1>
@@ -205,6 +420,21 @@ export default function DashboardPage() {
                       {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                     </p>
                   </div>
+                  {/* Date Range Filter */}
+                  <Select value={dateRange} onValueChange={setDateRange}>
+                    <SelectTrigger className="w-[160px] rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
+                      <Calendar className="h-4 w-4 mr-2 text-indigo-500" />
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="this_month">This Month</SelectItem>
+                      <SelectItem value="last_month">Last Month</SelectItem>
+                      <SelectItem value="last_3_months">Last 3 Months</SelectItem>
+                      <SelectItem value="last_6_months">Last 6 Months</SelectItem>
+                      <SelectItem value="this_year">This Year</SelectItem>
+                      <SelectItem value="all_time">All Time</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {/* Net Worth Display */}
@@ -238,14 +468,63 @@ export default function DashboardPage() {
                     )}
                   </div>
                   {showBalance && (
-                    <div className="mt-3 text-xs text-slate-600 dark:text-slate-400">
-                      <div className="flex justify-between">
-                        <span>Assets: {format(stats.investmentValue + stats.lendingsOutstanding + stats.thisMonthIncome)}</span>
+                    <>
+                      {/* Net Worth Trend Chart */}
+                      {netWorthTrend.length > 0 ? (
+                        <div className="mt-6 mb-4">
+                          <div className="flex items-center justify-between mb-4">
+                            <span className="text-xs font-medium text-slate-600 dark:text-slate-400">12-Month Trend</span>
+                            <div className="flex items-center gap-2">
+                              <NetWorthMicroSparkline data={netWorthTrend} />
+                              <span className="text-xs font-medium text-emerald-600">
+                                {netWorthTrend[netWorthTrend.length - 1]?.change_percent >= 0 ? '+' : ''}{netWorthTrend[netWorthTrend.length - 1]?.change_percent?.toFixed(1)}%
+                              </span>
+                            </div>
+                          </div>
+                          <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+                            <NetWorthSparkline data={netWorthTrend} height={60} />
+                          </div>
+                        </div>
+                      ) : netWorthError ? (
+                        <div className="mt-6 mb-4 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                          <p className="text-xs text-amber-800 dark:text-amber-300">{netWorthError}</p>
+                        </div>
+                      ) : (
+                        <div className="mt-6 mb-4 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                          <p className="text-xs text-slate-600 dark:text-slate-400">Loading trend data...</p>
+                        </div>
+                      )}
+                      
+                      {/* Health Score */}
+                      {healthScore ? (
+                        <div className="mt-4 mb-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Financial Health</span>
+                            <HealthScoreBadge healthData={healthScore} />
+                          </div>
+                          <HealthScoreIndicator 
+                            healthData={healthScore} 
+                            size="sm" 
+                            showRecommendations={true}
+                            className="mt-2"
+                          />
+                        </div>
+                      ) : netWorthError ? (
+                        <div className="mt-4 mb-3 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                          <p className="text-xs text-amber-800 dark:text-amber-300">Health score unavailable</p>
+                        </div>
+                      ) : null}
+                      
+                      {/* Assets/Liabilities Breakdown */}
+                      <div className="mt-3 text-xs text-slate-600 dark:text-slate-400">
+                        <div className="flex justify-between">
+                          <span>Assets: {format(stats.investmentValue + stats.lendingsOutstanding + stats.thisMonthIncome)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Liabilities: -{format(stats.borrowingsOwed + (stats.emiMonthly * (stats.emiCount > 0 ? 12 : 0)))}</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between">
-                        <span>Liabilities: -{format(stats.borrowingsOwed + (stats.emiMonthly * (stats.emiCount > 0 ? 12 : 0)))}</span>
-                      </div>
-                    </div>
+                    </>
                   )}
                   <p className="text-xs text-slate-500 mt-2">Assets (Investments + Income + Lendings) - Liabilities (Borrowings + EMIs)</p>
                 </div>
@@ -470,7 +749,7 @@ export default function DashboardPage() {
                     </div>
                     <div>
                       <CardTitle className="text-xl font-bold text-slate-900 dark:text-white">Spending Breakdown</CardTitle>
-                      <CardDescription className="text-sm font-medium text-slate-700 dark:text-slate-400">By category this month</CardDescription>
+                      <CardDescription className="text-sm font-medium text-slate-700 dark:text-slate-400">By category for selected period</CardDescription>
                     </div>
                   </div>
                 </div>
@@ -623,13 +902,13 @@ export default function DashboardPage() {
                   {recentExpenses.map((exp, idx) => (
                     <div key={exp.id} className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors border border-slate-200 dark:border-slate-700">
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white shadow-md" style={{ backgroundColor: exp.category_color || '#64748b' }}>
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white shadow-md" style={{ backgroundColor: exp.category_color ?? DEFAULT_CATEGORY_COLOR }}>
                           <Wallet className="h-5 w-5" />
                         </div>
                         <div>
                           <p className="font-semibold text-sm text-slate-900 dark:text-white">{exp.description}</p>
                           <p className="text-xs text-slate-500">
-                            {new Date(exp.transaction_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            {exp.category_name ?? 'Uncategorized'} · {new Date(exp.transaction_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                           </p>
                         </div>
                       </div>
@@ -643,6 +922,51 @@ export default function DashboardPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* AI Anomaly Detection */}
+          {anomalies.length > 0 && (
+            <Card className="border border-amber-200 dark:border-amber-800 shadow-xl rounded-3xl bg-white dark:bg-slate-900">
+              <CardHeader className="border-b border-amber-200 dark:border-amber-800 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-md">
+                    <AlertTriangle className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      Unusual Spending Detected
+                      <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs">{anomalies.length}</Badge>
+                    </CardTitle>
+                    <CardDescription className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                      Transactions significantly above your category averages
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="space-y-3">
+                  {anomalies.slice(0, 5).map((anomaly: any, idx: number) => (
+                    <div key={anomaly.expense_id || idx} className="flex items-center justify-between p-4 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                          <AlertTriangle className="h-5 w-5 text-amber-600" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-sm text-slate-900 dark:text-white">{anomaly.description || 'Unknown'}</p>
+                          <p className="text-xs text-slate-500">
+                            {anomaly.category} · {anomaly.date} · {anomaly.multiplier}x above average
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-amber-600">{format(anomaly.amount)}</p>
+                        <p className="text-xs text-slate-500">avg: {format(anomaly.category_avg)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
     </div>

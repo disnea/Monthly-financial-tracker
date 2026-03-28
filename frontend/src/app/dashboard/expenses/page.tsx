@@ -9,10 +9,10 @@ import { Badge } from '@/components/ui/badge'
 import { 
   Plus, Wallet, Calendar, TrendingUp, DollarSign, Trash2, Edit, Upload, 
   Search, Filter, ChevronLeft, ChevronRight, Receipt, ShoppingBag, 
-  Utensils, Car, Home, Heart, Film, ChevronDown, X, Eye
+  Utensils, Car, Home, Heart, Film, ChevronDown, X, Eye, Sparkles
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { expenseApi, Expense, Category, categoryApi, financeApiClient } from '@/lib/api'
+import { expenseApi, aiApi, Expense, Category, categoryApi, financeApiClient } from '@/lib/api'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -71,6 +71,10 @@ export default function ExpensesPage() {
     category_id: ''
   })
 
+  // AI auto-categorization state
+  const [aiSuggestion, setAiSuggestion] = useState<{ category_name: string | null; category_id: string | null; confidence: number } | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
+
   useEffect(() => {
     if (isAuthenticated && token) {
       fetchExpenses()
@@ -92,6 +96,33 @@ export default function ExpensesPage() {
     }
     load()
   }, [isAuthenticated, token])
+
+  // Debounced AI categorization when description changes
+  useEffect(() => {
+    if (!showForm || !formData.description || formData.description.length < 3) {
+      setAiSuggestion(null)
+      return
+    }
+    // Don't suggest if user already picked a category
+    if (formData.category_id) return
+
+    const timer = setTimeout(async () => {
+      setAiLoading(true)
+      try {
+        const result = await aiApi.categorize(formData.description, formData.amount || undefined)
+        if (result.category_name && result.confidence > 0) {
+          setAiSuggestion(result)
+        } else {
+          setAiSuggestion(null)
+        }
+      } catch {
+        setAiSuggestion(null)
+      } finally {
+        setAiLoading(false)
+      }
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [formData.description, showForm])
 
   const fetchExpenses = async () => {
     try {
@@ -496,8 +527,8 @@ export default function ExpensesPage() {
           <div className="flex-1 space-y-6">
             {Object.entries(groupedExpenses)
               .sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime())
-              .map(([date, dayExpenses]) => {
-                const dayTotal = dayExpenses.reduce((sum, e) => sum + e.amount, 0)
+              .map(([date, dayExpenses]: [string, Expense[]]) => {
+                const dayTotal = dayExpenses.reduce((sum: number, e: Expense) => sum + e.amount, 0)
                 const dateObj = new Date(date + 'T00:00:00')
                 
                 return (
@@ -680,6 +711,28 @@ export default function ExpensesPage() {
                   className={cn("rounded-xl", formErrors.description && "border-red-500 focus:ring-red-500")}
                 />
                 {formErrors.description && <p className="text-xs text-red-500">{formErrors.description}</p>}
+                {/* AI Category Suggestion */}
+                {(aiSuggestion || aiLoading) && !formData.category_id && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <Sparkles className="h-3.5 w-3.5 text-purple-500 flex-shrink-0" />
+                    {aiLoading ? (
+                      <span className="text-xs text-slate-500">Analyzing...</span>
+                    ) : aiSuggestion?.category_name ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (aiSuggestion.category_id) {
+                            setFormData(prev => ({ ...prev, category_id: aiSuggestion.category_id! }))
+                          }
+                          setAiSuggestion(null)
+                        }}
+                        className="text-xs text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 font-medium transition-colors"
+                      >
+                        Suggested: <span className="underline">{aiSuggestion.category_name}</span> ({Math.round(aiSuggestion.confidence * 100)}% match) — click to apply
+                      </button>
+                    ) : null}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">

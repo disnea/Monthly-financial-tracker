@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: finance_password
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
-      - "5432:5432"
+      - "5435:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/shared/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -26,7 +26,7 @@ services:
     image: redis:7-alpine
     container_name: finance_redis
     ports:
-      - "6379:6379"
+      - "6399:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes --requirepass redis_password
@@ -67,8 +67,8 @@ services:
       RABBITMQ_DEFAULT_USER: rabbitmq_user
       RABBITMQ_DEFAULT_PASS: rabbitmq_password
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "5673:5672"
+      - "15673:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -268,7 +268,31 @@ services:
       - finance_network
     restart: unless-stopped
 
-  # Celery Beat Scheduler for Periodic Tasks
+  # General Celery Worker for Finance Tasks (exchange rates, budget alerts)
+  celery_finance_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.celery
+    container_name: finance_celery_finance_worker
+    environment:
+      RABBITMQ_URL: amqp://rabbitmq_user:rabbitmq_password@rabbitmq:5672/
+      REDIS_URL: redis://:redis_password@redis:6379/6
+      DATABASE_URL: postgresql://finance_user:finance_password@postgres:5432/finance_db
+      EXCHANGE_RATE_API_KEY: ${EXCHANGE_RATE_API_KEY:-}
+      PYTHONUNBUFFERED: 1
+    command: celery -A workers.tasks worker --loglevel=info --concurrency=2
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - finance_network
+    restart: unless-stopped
+
+  # Celery Beat Scheduler for Stock Tasks
   celery_beat:
     build:
       context: ./backend
@@ -283,6 +307,28 @@ services:
       ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY:-your_alpha_vantage_key_here}
       PYTHONUNBUFFERED: 1
     command: celery -A workers.stock_tasks beat --loglevel=info
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - finance_network
+    restart: unless-stopped
+
+  # Celery Beat Scheduler for Finance Tasks (exchange rates, budget alerts, recurring)
+  celery_finance_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.celery
+    container_name: finance_celery_finance_beat
+    environment:
+      RABBITMQ_URL: amqp://rabbitmq_user:rabbitmq_password@rabbitmq:5672/
+      REDIS_URL: redis://:redis_password@redis:6379/6
+      DATABASE_URL: postgresql://finance_user:finance_password@postgres:5432/finance_db
+      EXCHANGE_RATE_API_KEY: ${EXCHANGE_RATE_API_KEY:-}
+      PYTHONUNBUFFERED: 1
+    command: celery -A workers.tasks beat --loglevel=info
     depends_on:
       rabbitmq:
         condition: service_healthy
