@@ -1,3 +1,4 @@
+import re
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 from sqlalchemy import text
@@ -31,6 +32,10 @@ async def get_db():
             await session.close()
 
 async def set_tenant_context(session: AsyncSession, tenant_id: str):
+    # Validate tenant_id is a valid UUID to prevent SQL injection
+    uuid_pattern = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
+    if not uuid_pattern.match(str(tenant_id)):
+        raise ValueError(f"Invalid tenant_id format: {tenant_id}")
     await session.execute(
         text(f"SET LOCAL app.current_tenant_id = '{tenant_id}';")
     )

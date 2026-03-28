@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 import uuid
 
@@ -94,7 +94,7 @@ async def create_investment(
         current_price=Decimal(str(investment.purchase_price)),
         current_value=Decimal(str(investment.quantity)) * Decimal(str(investment.purchase_price)),
         unrealized_gain_loss=Decimal("0"),
-        last_updated=datetime.utcnow()
+        last_updated=datetime.now(timezone.utc)
     )
     
     db.add(new_investment)
@@ -235,7 +235,7 @@ async def update_investment(
     investment.notes = investment_update.notes
     investment.current_value = investment.quantity * investment.current_price if investment.current_price else investment.quantity * investment.purchase_price
     investment.unrealized_gain_loss = investment.current_value - (investment.quantity * investment.purchase_price)
-    investment.last_updated = datetime.utcnow()
+    investment.last_updated = datetime.now(timezone.utc)
     
     await db.commit()
     
@@ -329,7 +329,7 @@ async def update_investment_price(
     investment.current_price = Decimal(str(payload.current_price))
     investment.current_value = investment.quantity * investment.current_price
     investment.unrealized_gain_loss = investment.current_value - (investment.quantity * investment.purchase_price)
-    investment.last_updated = datetime.utcnow()
+    investment.last_updated = datetime.now(timezone.utc)
     
     await db.commit()
     

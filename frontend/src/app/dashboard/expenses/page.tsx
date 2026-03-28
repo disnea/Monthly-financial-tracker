@@ -68,8 +68,10 @@ export default function ExpensesPage() {
     description: '',
     transaction_date: new Date().toISOString().split('T')[0],
     payment_method: 'UPI',
-    category_id: ''
+    category_id: '',
+    tags: [] as string[]
   })
+  const [tagInput, setTagInput] = useState('')
 
   // AI auto-categorization state
   const [aiSuggestion, setAiSuggestion] = useState<{ category_name: string | null; category_id: string | null; confidence: number } | null>(null)
@@ -143,8 +145,10 @@ export default function ExpensesPage() {
       description: expense.description || '',
       transaction_date: expense.transaction_date, // it's already "YYYY-MM-DD"
       payment_method: expense.payment_method || 'UPI',
-      category_id: expense.category_id || ''
+      category_id: expense.category_id || '',
+      tags: (expense as any).tags || []
     })
+    setTagInput('')
     setShowForm(true)
   }
 
@@ -176,8 +180,10 @@ export default function ExpensesPage() {
         description: '',
         transaction_date: new Date().toISOString().split('T')[0],
         payment_method: 'UPI',
-        category_id: ''
+        category_id: '',
+        tags: []
       })
+      setTagInput('')
       fetchExpenses()
     } catch (error: any) {
       toast.error(getErrorMessage(error) || `Failed to ${editingExpense ? 'update' : 'add'} expense`)
@@ -576,13 +582,18 @@ export default function ExpensesPage() {
                                   <h4 className="font-semibold text-slate-900 dark:text-white truncate group-hover:text-indigo-600 transition-colors">
                                     {expense.description}
                                   </h4>
-                                  <div className="flex items-center gap-3 mt-1">
+                                  <div className="flex items-center gap-3 mt-1 flex-wrap">
                                     <Badge variant="secondary" className="text-xs rounded-lg">
                                       {expense.category_name || 'Uncategorized'}
                                     </Badge>
                                     <span className="text-xs text-slate-500">
                                       {expense.payment_method}
                                     </span>
+                                    {(expense as any).tags?.map((tag: string, ti: number) => (
+                                      <Badge key={ti} variant="outline" className="text-[10px] rounded-md px-1.5 py-0 border-indigo-200 text-indigo-600 dark:border-indigo-800 dark:text-indigo-400">
+                                        {tag}
+                                      </Badge>
+                                    ))}
                                   </div>
                                 </div>
 
@@ -778,6 +789,39 @@ export default function ExpensesPage() {
                     <SelectItem value="Net Banking">Net Banking</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Tags Input */}
+              <div className="space-y-2">
+                <Label>Tags</Label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {formData.tags.map((tag, idx) => (
+                    <Badge key={idx} variant="secondary" className="rounded-lg px-2.5 py-1 text-xs gap-1.5 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                      {tag}
+                      <button type="button" onClick={() => setFormData({ ...formData, tags: formData.tags.filter((_, i) => i !== idx) })} className="hover:text-red-500 transition-colors">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Add a tag and press Enter..."
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && tagInput.trim()) {
+                        e.preventDefault()
+                        if (!formData.tags.includes(tagInput.trim())) {
+                          setFormData({ ...formData, tags: [...formData.tags, tagInput.trim()] })
+                        }
+                        setTagInput('')
+                      }
+                    }}
+                    className="rounded-xl flex-1"
+                  />
+                </div>
+                <p className="text-xs text-slate-500">Press Enter to add tags</p>
               </div>
 
               <div className="flex gap-3 pt-4">

@@ -242,9 +242,30 @@ export default function SettingsPage() {
         <p className="text-muted-foreground">Manage your account settings and preferences</p>
       </div>
 
-      <div className="flex gap-6">
-        {/* Sidebar */}
-        <div className="w-64 space-y-2">
+      <div className="flex flex-col md:flex-row gap-6">
+        {/* Mobile: horizontal scrollable tab bar */}
+        <div className="md:hidden overflow-x-auto pb-2 -mx-1">
+          <div className="flex gap-2 px-1 min-w-max">
+            {tabs.map((tab) => {
+              const Icon = tab.icon
+              return (
+                <Button
+                  key={tab.id}
+                  variant={activeTab === tab.id ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="flex-shrink-0 rounded-full px-4"
+                  onClick={() => setActiveTab(tab.id)}
+                >
+                  <Icon className="h-4 w-4 mr-2" />
+                  {tab.label}
+                </Button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Desktop: vertical sidebar */}
+        <div className="hidden md:block md:w-64 space-y-2">
           {tabs.map((tab) => {
             const Icon = tab.icon
             return (

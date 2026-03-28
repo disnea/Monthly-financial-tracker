@@ -14,7 +14,7 @@ sys.path.append('/app')
 
 from shared.database import get_db, set_tenant_context
 from shared.models import Watchlist
-from shared.middleware.auth import get_current_user
+from shared.middleware.auth import get_current_user, auth_middleware
 from shared.redis_client import get_redis
 from shared.config import get_settings
 
@@ -27,6 +27,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add auth middleware to validate JWT tokens
+app.middleware("http")(auth_middleware)
 
 settings = get_settings()
 
@@ -270,7 +273,7 @@ async def remove_from_watchlist(
     await set_tenant_context(db, user["tenant_id"])
     
     result = await db.execute(
-        select(Watchlist).where(Watchlist.id == uuid.UUID(watchlist_id))
+        select(Watchlist).where(Watchlist.id == uuid.UUID(watchlist_id), Watchlist.user_id == uuid.UUID(user["user_id"]))
     )
     watchlist_item = result.scalar_one_or_none()
     

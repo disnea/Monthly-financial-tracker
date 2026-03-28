@@ -47,7 +47,7 @@ def _compile_array_sqlite(type_, compiler, **kw):
 
 # ── Standard imports ─────────────────────────────────────────────────────
 import uuid as _uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from unittest.mock import patch, MagicMock, AsyncMock
 
@@ -85,7 +85,7 @@ TEST_USER = {
 def create_test_token(user_data: Optional[dict] = None) -> str:
     """Generate a valid JWT for testing."""
     payload = (user_data or TEST_USER).copy()
-    payload["exp"] = datetime.utcnow() + timedelta(hours=1)
+    payload["exp"] = datetime.now(timezone.utc) + timedelta(hours=1)
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 

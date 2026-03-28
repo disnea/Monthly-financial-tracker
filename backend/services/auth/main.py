@@ -2,10 +2,10 @@ from fastapi import FastAPI, Depends, HTTPException, status, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from jose import jwt
 from passlib.context import CryptContext
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 import uuid
 import io
@@ -57,6 +57,19 @@ class RegisterRequest(BaseModel):
     tenant_name: str
     phone: Optional[str] = None
 
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v):
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters long')
+        if not any(c.isupper() for c in v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not any(c.islower() for c in v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not any(c.isdigit() for c in v):
+            raise ValueError('Password must contain at least one digit')
+        return v
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
@@ -83,7 +96,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(data: dict) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRATION_MINUTES)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_EXPIRATION_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
@@ -112,7 +125,9 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
     result = await db.execute(select(Tenant).where(Tenant.slug == tenant_slug))
     tenant = result.scalar_one_or_none()
     
+    is_new_tenant = False
     if not tenant:
+        is_new_tenant = True
         tenant = Tenant(
             name=request.tenant_name,
             slug=tenant_slug,
@@ -129,7 +144,7 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
         password_hash=hash_password(request.password),
         full_name=request.full_name,
         phone=request.phone,
-        role="admin" if not tenant.id else "member",
+        role="admin" if is_new_tenant else "member",
         is_active=True,
         email_verified=False
     )
@@ -180,7 +195,7 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
             detail="User account is inactive"
         )
     
-    user.last_login_at = datetime.utcnow()
+    user.last_login_at = datetime.now(timezone.utc)
     await db.commit()
     
     token_data = {

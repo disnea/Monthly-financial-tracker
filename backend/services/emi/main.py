@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import date, timedelta
 from decimal import Decimal
@@ -36,7 +36,7 @@ class EMICreate(BaseModel):
     loan_type: str
     lender_name: str
     account_number: Optional[str] = None
-    principal_amount: float
+    principal_amount: float = Field(gt=0, description="Amount must be positive")
     currency: str = "USD"
     interest_rate: float
     interest_type: str = "reducing"

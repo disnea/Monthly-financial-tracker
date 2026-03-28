@@ -4,9 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, update, text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import joinedload
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 import uuid
 import io
@@ -48,7 +48,7 @@ minio_client = Minio(
 
 class ExpenseCreate(BaseModel):
     category_id: Optional[str] = None
-    amount: float
+    amount: float = Field(gt=0, description="Amount must be positive")
     currency: str = "USD"
     description: Optional[str] = None
     transaction_date: date
@@ -108,7 +108,7 @@ DEFAULT_CATEGORIES = [
 class BudgetCreate(BaseModel):
     category_id: Optional[str] = None
     name: str
-    amount: float
+    amount: float = Field(gt=0, description="Amount must be positive")
     currency: str = "USD"
     period: str
     start_date: date
@@ -218,10 +218,6 @@ async def ensure_default_categories_for_tenant(
     db: AsyncSession,
     tenant_id: str,
 ):
-    # Ensure schema has latest columns (for legacy databases)
-    await db.execute(text("ALTER TABLE categories ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE"))
-    await db.commit()
-
     # Check if this tenant already has any categories
     result = await db.execute(
         select(func.count(Category.id)).where(
@@ -490,36 +486,6 @@ async def create_category(
         icon=new_category.icon,
         is_system=new_category.is_system,
 )
-
-@app.get("/categories", response_model=List[CategoryResponse])
-async def get_categories(
-    request: Request,
-    db: AsyncSession = Depends(get_db)
-):
-    user = get_current_user(request)
-    await set_tenant_context(db, user["tenant_id"])
-
-    # Ensure system defaults exist for this tenant
-    await ensure_default_categories_for_tenant(db, user["tenant_id"])
-    
-    result = await db.execute(
-        select(Category).where(
-            Category.tenant_id == uuid.UUID(user["tenant_id"])
-        )
-    )
-    categories = result.scalars().all()
-    
-    return [
-        CategoryResponse(
-            id=str(cat.id),
-            name=cat.name,
-            type=cat.type,
-            color=cat.color,
-            icon=cat.icon,
-            is_system=cat.is_system
-        )
-        for cat in categories
-    ]
 
 @app.put("/categories/{category_id}", response_model=CategoryResponse)
 async def update_category(
@@ -957,7 +923,7 @@ async def import_bank_statement(
 class BorrowingCreate(BaseModel):
     lender_name: str
     lender_contact: Optional[str] = None
-    principal_amount: float
+    principal_amount: float = Field(gt=0, description="Amount must be positive")
     currency: str = "INR"
     interest_rate: float = 0
     interest_type: str = "none"  # 'none', 'simple', 'compound'
@@ -968,7 +934,7 @@ class BorrowingCreate(BaseModel):
     notes: Optional[str] = None
 
 class RepaymentCreate(BaseModel):
-    amount: float
+    amount: float = Field(gt=0, description="Amount must be positive")
     repayment_date: date
     payment_method: Optional[str] = None
     reference_number: Optional[str] = None
@@ -1157,7 +1123,7 @@ async def create_repayment(borrowing_id: str, data: RepaymentCreate, request: Re
     ), 2)))
     if data.close_borrowing or float(b.remaining_amount) <= 0:
         b.status = "closed"
-        b.closed_at = datetime.utcnow()
+        b.closed_at = datetime.now(timezone.utc)
     elif float(b.total_repaid) > 0:
         b.status = "partially_paid"
     await db.commit()
@@ -1256,7 +1222,7 @@ async def close_borrowing(borrowing_id: str, request: Request, db: AsyncSession 
     if not b:
         raise HTTPException(status_code=404, detail="Borrowing not found")
     b.status = "closed"
-    b.closed_at = datetime.utcnow()
+    b.closed_at = datetime.now(timezone.utc)
     await db.commit()
     return {"message": "Borrowing marked as fully repaid"}
 
@@ -1285,7 +1251,7 @@ async def reopen_borrowing(borrowing_id: str, request: Request, db: AsyncSession
 
 class IncomeCreate(BaseModel):
     source: str  # salary, freelance, dividends, rental, gift, other
-    amount: float
+    amount: float = Field(gt=0, description="Amount must be positive")
     currency: str = "INR"
     income_date: date
     description: Optional[str] = None
@@ -1417,7 +1383,7 @@ async def delete_income(income_id: str, request: Request, db: AsyncSession = Dep
 class LendingCreate(BaseModel):
     borrower_name: str
     borrower_contact: Optional[str] = None
-    principal_amount: float
+    principal_amount: float = Field(gt=0, description="Amount must be positive")
     currency: str = "INR"
     interest_rate: float = 0
     interest_type: str = "none"  # 'none', 'simple', 'compound'
@@ -1427,7 +1393,7 @@ class LendingCreate(BaseModel):
     notes: Optional[str] = None
 
 class CollectionCreate(BaseModel):
-    amount: float
+    amount: float = Field(gt=0, description="Amount must be positive")
     collection_date: date
     payment_method: Optional[str] = None
     reference_number: Optional[str] = None
@@ -1599,7 +1565,7 @@ async def create_collection(lending_id: str, data: CollectionCreate, request: Re
     ), 2)))
     if data.close_lending or float(l.remaining_amount) <= 0:
         l.status = "closed"
-        l.closed_at = datetime.utcnow()
+        l.closed_at = datetime.now(timezone.utc)
     elif float(l.total_received) > 0:
         l.status = "partially_received"
     await db.commit()
@@ -1691,7 +1657,7 @@ async def close_lending(lending_id: str, request: Request, db: AsyncSession = De
     if not l:
         raise HTTPException(status_code=404, detail="Lending not found")
     l.status = "closed"
-    l.closed_at = datetime.utcnow()
+    l.closed_at = datetime.now(timezone.utc)
     await db.commit()
     return {"message": "Lending marked as fully received"}
 

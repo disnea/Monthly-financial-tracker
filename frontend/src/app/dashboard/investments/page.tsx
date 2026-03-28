@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Plus, TrendingUp, TrendingDown, DollarSign, Calendar, BarChart3, Trash2, RefreshCw, Activity, BarChart2, LineChart, Edit, X } from 'lucide-react'
+import { Plus, TrendingUp, TrendingDown, DollarSign, Calendar, BarChart3, Trash2, RefreshCw, Activity, BarChart2, LineChart, Edit, X, Search } from 'lucide-react'
 import { useAuthStore } from '@/lib/store'
 import { toast } from 'sonner'
 import { useCurrency } from '@/hooks/useCurrency'
@@ -46,6 +46,8 @@ export default function InvestmentsPage() {
   const [showForm, setShowForm] = useState(false)
   const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [typeFilter, setTypeFilter] = useState<string>('all')
   
   // Stock monitor state
   const [selectedSymbol, setSelectedSymbol] = useState('AAPL')
@@ -217,17 +219,46 @@ export default function InvestmentsPage() {
   const totalProfitLoss = currentValue - totalInvested
   const totalProfitLossPercentage = totalInvested > 0 ? (totalProfitLoss / totalInvested) * 100 : 0
 
+  // Filters
+  const filtered = investments.filter(inv => {
+    const matchSearch = inv.asset_name.toLowerCase().includes(searchQuery.toLowerCase()) || (inv.asset_symbol || '').toLowerCase().includes(searchQuery.toLowerCase())
+    const matchType = typeFilter === 'all' || inv.investment_type.toLowerCase() === typeFilter.toLowerCase()
+    return matchSearch && matchType
+  })
+
   return (
     <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Investments & Market Monitor</h1>
           <p className="text-muted-foreground">Track stocks in real-time and manage your portfolio</p>
         </div>
-        <Button onClick={() => setShowForm(true)} className="rounded-xl">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Investment
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input placeholder="Search asset..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10 rounded-xl border-slate-200 focus:border-emerald-500" />
+          </div>
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <SelectTrigger className="w-[150px] rounded-xl border-slate-200">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="stocks">Stocks</SelectItem>
+              <SelectItem value="mutual fund">Mutual Fund</SelectItem>
+              <SelectItem value="gold">Gold</SelectItem>
+              <SelectItem value="crypto">Crypto</SelectItem>
+              <SelectItem value="bonds">Bonds</SelectItem>
+              <SelectItem value="etf">ETF</SelectItem>
+              <SelectItem value="fd">Fixed Deposit</SelectItem>
+              <SelectItem value="real estate">Real Estate</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button onClick={() => setShowForm(true)} className="rounded-xl">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Investment
+          </Button>
+        </div>
       </div>
 
       {/* Portfolio Summary Stats */}
@@ -415,23 +446,25 @@ export default function InvestmentsPage() {
 
       {loading ? (
         <div className="text-center py-8">Loading investments...</div>
-      ) : investments.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <BarChart3 className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No Investments</h3>
+            <h3 className="text-lg font-semibold mb-2">{searchQuery || typeFilter !== 'all' ? 'No investments found' : 'No Investments'}</h3>
             <p className="text-muted-foreground text-center mb-4">
-              Add your first investment to start tracking your portfolio
+              {searchQuery || typeFilter !== 'all' ? 'Try adjusting your search or filter criteria.' : 'Add your first investment to start tracking your portfolio'}
             </p>
+            {!searchQuery && typeFilter === 'all' && (
             <Button onClick={() => setShowForm(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Add Investment
             </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {investments.map((investment) => (
+          {filtered.map((investment) => (
             <Card key={investment.id} className="hover:shadow-2xl transition-all duration-500 border border-slate-200/60 dark:border-slate-700/60 shadow-xl bg-gradient-to-br from-white via-slate-50/30 to-emerald-50/20 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 rounded-2xl">
               <CardHeader>
                 <div className="flex justify-between items-start">

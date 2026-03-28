@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { 
   Plus, Calculator, Calendar, DollarSign, Trash2, TrendingDown, 
   TrendingUp, Clock, CheckCircle2, AlertCircle, X, PieChart,
-  ChevronRight, CreditCard, Building2, Percent, CalendarDays, Edit
+  ChevronRight, CreditCard, Building2, Percent, CalendarDays, Edit, Search
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { emiApi, EMI, EMIPayment } from '@/lib/api'
@@ -31,6 +31,8 @@ export default function EMIPage() {
   const [schedule, setSchedule] = useState<EMIPayment[]>([])
   const [loadingSchedule, setLoadingSchedule] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string>('all')
   const [formData, setFormData] = useState<EMI>({
     loan_type: '',
     lender_name: '',
@@ -201,6 +203,14 @@ export default function EMIPage() {
   const totalMonthlyEMI = emis.reduce((sum, emi) => sum + (emi.monthly_emi || 0), 0)
   const totalInterest = emis.reduce((sum, emi) => sum + (emi.total_interest || 0), 0)
 
+  // Filters
+  const filtered = emis.filter(emi => {
+    const matchSearch = emi.loan_type.toLowerCase().includes(searchQuery.toLowerCase()) || emi.lender_name.toLowerCase().includes(searchQuery.toLowerCase())
+    const isCompleted = (emi.paid_months || 0) >= emi.tenure_months
+    const matchStatus = statusFilter === 'all' || (statusFilter === 'completed' ? isCompleted : !isCompleted)
+    return matchSearch && matchStatus
+  })
+
   const getLoanIcon = (type: string) => {
     if (type.toLowerCase().includes('home')) return Building2
     if (type.toLowerCase().includes('car') || type.toLowerCase().includes('vehicle')) return CreditCard
@@ -230,6 +240,20 @@ export default function EMIPage() {
             </div>
             
             <div className="flex flex-wrap gap-2">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input placeholder="Search loan or lender..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10 rounded-xl border-slate-200 focus:border-blue-500" />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[140px] rounded-xl border-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
               <Button 
                 onClick={() => setShowCalculator(true)}
                 variant="outline"
@@ -279,17 +303,18 @@ export default function EMIPage() {
               <p className="text-slate-600">Loading EMI loans...</p>
             </div>
           </div>
-        ) : emis.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="flex items-center justify-center py-12">
             <Card className="max-w-md border-none shadow-2xl">
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-full flex items-center justify-center mb-6">
                   <Calculator className="h-10 w-10 text-white" />
                 </div>
-                <h3 className="text-2xl font-bold mb-2">No EMI Loans Yet</h3>
+                <h3 className="text-2xl font-bold mb-2">{searchQuery || statusFilter !== 'all' ? 'No loans found' : 'No EMI Loans Yet'}</h3>
                 <p className="text-slate-600 text-center mb-6 max-w-sm">
-                  Add your loans to track EMI payments and monitor your financial obligations
+                  {searchQuery || statusFilter !== 'all' ? 'Try adjusting your search or filter criteria.' : 'Add your loans to track EMI payments and monitor your financial obligations'}
                 </p>
+                {!searchQuery && statusFilter === 'all' && (
                 <div className="flex gap-3">
                   <Button onClick={() => setShowCalculator(true)} variant="outline" className="rounded-xl">
                     <Calculator className="h-4 w-4 mr-2" />
@@ -300,12 +325,13 @@ export default function EMIPage() {
                     Add Loan
                   </Button>
                 </div>
+                )}
               </CardContent>
             </Card>
           </div>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {emis.map((emi) => {
+            {filtered.map((emi) => {
               const Icon = getLoanIcon(emi.loan_type)
               const progress = getProgressPercentage(emi)
               const remaining = getRemainingMonths(emi)
